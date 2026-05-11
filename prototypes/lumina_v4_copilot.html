@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lumina v4 — Conversational Co-pilot</title>
+<style>
+  :root {
+    --navy: #0b2545; --navy-2: #13315c;
+    --slate: #475569; --slate-2: #64748b;
+    --bg: #f8fafc; --card: #ffffff; --border: #e2e8f0;
+    --green: #16a34a; --green-bg: #f0fdf4;
+    --amber: #d97706; --amber-bg: #fffbeb;
+    --red: #dc2626; --red-bg: #fef2f2;
+    --accent: #2563eb; --accent-bg: #eff6ff;
+    --rose: #e11d48; --rose-bg: #fff1f2;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { font-family: -apple-system, "Inter", sans-serif; background: var(--bg); color: #1e293b; line-height: 1.5; font-size: 14px; height: 100%; }
+  body { display: flex; flex-direction: column; min-height: 100vh; }
+  header.top { background: var(--navy); color: white; padding: 18px 28px; border-bottom: 4px solid var(--rose); flex-shrink: 0; }
+  header.top h1 { font-size: 18px; font-weight: 600; }
+  header.top .sub { font-size: 12px; opacity: 0.75; margin-top: 2px; }
+  header.top .pill { background: var(--rose); padding: 1px 8px; border-radius: 4px; margin-left: 8px; font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; font-weight: 700; }
+  .tabs { display: flex; background: white; border-bottom: 1px solid var(--border); padding: 0 24px; flex-shrink: 0; }
+  .tab { padding: 14px 18px; cursor: pointer; border-bottom: 2px solid transparent; font-size: 13px; font-weight: 500; color: var(--slate); white-space: nowrap; }
+  .tab.active { color: var(--navy); border-bottom-color: var(--rose); }
+  .tab:hover:not(.active) { color: var(--navy-2); background: #f8fafc; }
+  main { padding: 0; flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .panel { display: none; flex: 1; flex-direction: column; min-height: 0; padding: 24px 28px; }
+  .panel.active { display: flex; }
+  .panel.chat-panel { padding: 0; }
+
+  h2 { font-size: 18px; margin-bottom: 4px; color: var(--navy); }
+  h3 { font-size: 15px; margin: 18px 0 8px; color: var(--navy-2); }
+  h4 { font-size: 13px; margin: 12px 0 6px; color: var(--slate); text-transform: uppercase; letter-spacing: 0.05em; }
+  p { margin-bottom: 10px; }
+  .lede { color: var(--slate); margin-bottom: 16px; font-size: 13px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 18px; margin-bottom: 16px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+  /* Chat layout */
+  .chat-shell {
+    display: grid;
+    grid-template-columns: 1.15fr 1fr;
+    gap: 0;
+    flex: 1;
+    min-height: 0;
+  }
+  @media (max-width: 1100px) {
+    .chat-shell { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+  }
+  .chat-col { display: flex; flex-direction: column; background: white; border-right: 1px solid var(--border); min-height: 0; }
+  .chat-header { padding: 14px 24px; border-bottom: 1px solid var(--border); display: flex; gap: 12px; align-items: center; flex-shrink: 0; }
+  .ai-avatar {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--rose), #f43f5e);
+    color: white; display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 13px;
+  }
+  .chat-title { font-weight: 600; font-size: 14px; }
+  .chat-status { font-size: 11px; color: var(--green); display: flex; align-items: center; gap: 4px; }
+  .chat-status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+
+  .chat-stream {
+    flex: 1; overflow-y: auto; padding: 18px 24px;
+    display: flex; flex-direction: column; gap: 12px;
+    background: linear-gradient(180deg, #fefcfd 0%, #fafafa 100%);
+    min-height: 0;
+  }
+  .msg { display: flex; gap: 10px; max-width: 88%; }
+  .msg.ai { align-self: flex-start; }
+  .msg.user { align-self: flex-end; flex-direction: row-reverse; }
+  .msg-avatar {
+    width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; flex-shrink: 0;
+  }
+  .msg.ai .msg-avatar { background: linear-gradient(135deg, var(--rose), #f43f5e); color: white; }
+  .msg.user .msg-avatar { background: var(--navy); color: white; }
+  .msg-bubble {
+    padding: 10px 14px; border-radius: 14px; font-size: 13.5px; line-height: 1.55;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+  .msg.ai .msg-bubble { background: white; border: 1px solid var(--border); border-top-left-radius: 4px; }
+  .msg.user .msg-bubble { background: var(--navy); color: white; border-top-right-radius: 4px; }
+  .msg-bubble strong { color: var(--navy); }
+  .msg.user .msg-bubble strong { color: white; }
+
+  .typing { display: flex; gap: 4px; padding: 4px 0; }
+  .typing span { width: 6px; height: 6px; border-radius: 50%; background: var(--slate-2); animation: typingDot 1.2s infinite ease-in-out; }
+  .typing span:nth-child(2) { animation-delay: 0.15s; }
+  .typing span:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes typingDot { 0%, 80%, 100% { opacity: 0.3; transform: scale(0.85); } 40% { opacity: 1; transform: scale(1.2); } }
+
+  .insight {
+    background: var(--amber-bg); border-left: 3px solid var(--amber);
+    padding: 8px 12px; border-radius: 0 8px 8px 0; margin: 6px 0;
+    font-size: 12.5px; color: #78350f;
+  }
+  .insight strong { color: var(--amber); display: block; margin-bottom: 2px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .insight.green { background: var(--green-bg); border-left-color: var(--green); color: #14532d; }
+  .insight.green strong { color: var(--green); }
+  .insight.rose { background: var(--rose-bg); border-left-color: var(--rose); color: #881337; }
+  .insight.rose strong { color: var(--rose); }
+
+  .quick-replies { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .qr {
+    background: white; border: 1px solid var(--rose); color: var(--rose);
+    padding: 6px 12px; border-radius: 18px; font-size: 12.5px; cursor: pointer;
+    font-family: inherit; transition: background 0.15s;
+  }
+  .qr:hover { background: var(--rose-bg); }
+  .qr.outline { border-color: var(--border); color: var(--slate); }
+  .qr.outline:hover { background: var(--bg); }
+
+  .chat-input {
+    border-top: 1px solid var(--border); padding: 12px 24px; flex-shrink: 0;
+    background: white;
+  }
+  .input-row { display: flex; gap: 8px; align-items: flex-end; }
+  .input-row textarea {
+    flex: 1; resize: none; min-height: 40px; max-height: 120px;
+    padding: 10px 14px; border: 1px solid var(--border); border-radius: 20px;
+    font-size: 13px; font-family: inherit; line-height: 1.4;
+  }
+  .input-row textarea:focus { outline: 2px solid var(--rose); outline-offset: -1px; }
+  .send-btn {
+    background: var(--rose); color: white; border: none; padding: 10px 18px;
+    border-radius: 20px; font-size: 13px; font-weight: 500; cursor: pointer;
+  }
+  .send-btn:disabled { background: var(--slate-2); cursor: not-allowed; }
+  .input-hint { font-size: 11px; color: var(--slate-2); margin-top: 6px; }
+
+  /* Doc preview pane */
+  .doc-col { display: flex; flex-direction: column; background: var(--bg); min-height: 0; }
+  .doc-header { padding: 14px 24px; border-bottom: 1px solid var(--border); background: white; flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; }
+  .doc-header-title { font-weight: 600; font-size: 14px; }
+  .doc-state-pill {
+    font-size: 11px; padding: 2px 10px; border-radius: 12px;
+    background: var(--amber-bg); color: var(--amber);
+  }
+  .doc-state-pill.collecting { background: var(--accent-bg); color: var(--accent); }
+  .doc-state-pill.drafting { background: var(--amber-bg); color: var(--amber); }
+  .doc-state-pill.ready { background: var(--green-bg); color: var(--green); }
+  .doc-state-pill.empty { background: #f1f5f9; color: var(--slate); }
+
+  .doc-stage { flex: 1; overflow-y: auto; padding: 24px; min-height: 0; }
+  .doc-paper {
+    background: white; border: 1px solid var(--border); border-radius: 4px;
+    box-shadow: 0 1px 2px rgba(15,23,42,0.06), 0 8px 32px rgba(15,23,42,0.06);
+    padding: 36px 40px; font-family: Georgia, serif; font-size: 13px; line-height: 1.85;
+    min-height: 100%;
+  }
+  .doc-paper.empty {
+    display: flex; align-items: center; justify-content: center; text-align: center;
+    color: var(--slate-2); font-style: italic; min-height: 380px;
+    background: #fafafa; box-shadow: none; border-style: dashed;
+  }
+  .doc-paper h1.doc-title { font-family: -apple-system, sans-serif; font-size: 16px; text-transform: uppercase; letter-spacing: 0.08em; text-align: center; margin-bottom: 18px; color: var(--navy); }
+  .doc-paper p { margin-bottom: 10px; }
+  .doc-paper .field-known { color: #1e293b; font-weight: 600; background: var(--green-bg); padding: 1px 4px; border-radius: 3px; }
+  .doc-paper .field-pending { color: var(--slate-2); font-style: italic; background: var(--amber-bg); padding: 1px 4px; border-radius: 3px; }
+  .doc-paper .doc-section-h { font-family: -apple-system, sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--navy); font-size: 12px; margin: 18px 0 6px; }
+  .doc-paper .new-content { background: var(--green-bg); padding: 2px 4px; border-radius: 3px; animation: highlight 2.5s ease-out; }
+  @keyframes highlight {
+    0% { background: var(--amber-bg); }
+    100% { background: var(--green-bg); }
+  }
+
+  /* Specialist mode panels */
+  .spec-state {
+    background: white; border-top: 1px solid var(--border); padding: 14px 24px;
+    flex-shrink: 0; max-height: 200px; overflow-y: auto;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px;
+  }
+  .spec-state-row { display: flex; gap: 10px; padding: 3px 0; }
+  .spec-state-key { color: var(--slate); min-width: 140px; }
+  .spec-state-val { color: var(--navy); font-weight: 500; }
+  .spec-state-val.empty { color: var(--amber); font-style: italic; }
+  .spec-toggle { font-size: 11px; color: var(--slate); cursor: pointer; user-select: none; padding: 8px 24px; border-top: 1px solid var(--border); background: white; flex-shrink: 0; }
+  .spec-toggle:hover { color: var(--navy); }
+
+  /* Other tabs */
+  .conversation-card { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-bottom: 10px; }
+  .conversation-card .conv-meta { font-size: 11px; color: var(--slate); margin-top: 4px; }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; background: var(--rose-bg); color: var(--rose); }
+  .badge.green { background: var(--green-bg); color: var(--green); }
+  .badge.amber { background: var(--amber-bg); color: var(--amber); }
+  .badge.slate { background: #f1f5f9; color: var(--slate); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  th { background: #f8fafc; font-weight: 600; color: var(--slate); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+  .stat { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 16px; text-align: center; }
+  .stat .num { font-size: 28px; font-weight: 700; color: var(--rose); }
+  .stat .label { font-size: 11px; color: var(--slate); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
+
+  .callout { padding: 12px 14px; border-radius: 0 6px 6px 0; margin: 14px 0; font-size: 13px; }
+  .callout.amber { background: var(--amber-bg); border-left: 3px solid var(--amber); }
+  .callout.green { background: var(--green-bg); border-left: 3px solid var(--green); }
+  .callout.rose { background: var(--rose-bg); border-left: 3px solid var(--rose); }
+
+  .memo { max-width: 820px; line-height: 1.65; }
+  .memo h2 { font-size: 22px; margin-bottom: 8px; }
+  .memo h3 { font-size: 16px; margin-top: 24px; }
+  .memo p { margin-bottom: 12px; font-size: 14px; }
+  .memo ul, .memo ol { margin: 8px 0 14px 24px; }
+  .memo li { margin-bottom: 6px; font-size: 14px; }
+  .memo strong { color: var(--navy); }
+  hr.sep { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+
+  button { background: var(--rose); color: white; padding: 10px 16px; border: none; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; }
+  button:hover { filter: brightness(1.05); }
+  button.secondary { background: white; color: var(--navy); border: 1px solid var(--border); }
+  button.secondary:hover { background: var(--bg); }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1>Lumina — Conversational Co-pilot <span class="badge" style="background:rgba(255,255,255,0.15); color:white">v4</span></h1>
+  <div class="sub">AI as augmentation, not replacement. The specialist drives a conversation; the agent gathers context, surfaces edge cases, drafts, revises.<span class="pill">human always in the loop</span></div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <div class="tab active" data-tab="chat">Chat with Co-pilot</div>
+  <div class="tab" data-tab="history">Past Conversations</div>
+  <div class="tab" data-tab="grounding">Grounding (Real Wolt FIN templates)</div>
+  <div class="tab" data-tab="notes">Decision Notes</div>
+</nav>
+
+<main>
+
+<!-- ============= CHAT ============= -->
+<section class="panel chat-panel active" id="panel-chat">
+  <div class="chat-shell">
+    <div class="chat-col">
+      <div class="chat-header">
+        <div class="ai-avatar">L</div>
+        <div>
+          <div class="chat-title">Lumina Co-pilot</div>
+          <div class="chat-status">Connected · Trained on Wolt + DoorDash + Deliveroo HR corpus</div>
+        </div>
+        <button class="secondary" style="margin-left:auto; padding:6px 12px; font-size:12px" onclick="resetChat()">New conversation</button>
+      </div>
+      <div class="chat-stream" id="chat-stream"></div>
+      <div class="chat-input">
+        <div class="input-row">
+          <textarea id="chat-input-text" placeholder="Type a message..." rows="1" onkeydown="handleKey(event)"></textarea>
+          <button class="send-btn" onclick="sendUser()">Send</button>
+        </div>
+        <div class="input-hint">Try: "I need to reduce someone's hours" · "Hire a new product engineer in Helsinki" · "Aino is going from fixed-term to permanent"</div>
+      </div>
+      <div class="spec-toggle" onclick="toggleSpec()">▸ <span id="spec-toggle-label">Show specialist's view</span> (the agent's internal state)</div>
+      <div class="spec-state" id="spec-state" style="display:none"></div>
+    </div>
+
+    <div class="doc-col">
+      <div class="doc-header">
+        <div class="doc-header-title">Document being drafted</div>
+        <div class="doc-state-pill empty" id="doc-state-pill">Empty</div>
+      </div>
+      <div class="doc-stage" id="doc-stage">
+        <div class="doc-paper empty" id="doc-paper">
+          The document will appear here as the conversation progresses.<br><br>Each piece of information you give the co-pilot fills in another field. Edge cases and regulatory context are surfaced as we go.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============= HISTORY ============= -->
+<section class="panel" id="panel-history">
+  <h2>Past Conversations</h2>
+  <p class="lede">Every conversation is auditable: what was asked, what the AI surfaced, what the human accepted or revised. This becomes the legal record (alongside the final document).</p>
+
+  <div class="grid-3" style="margin-bottom:20px">
+    <div class="stat"><div class="num">2,847</div><div class="label">Conversations this quarter</div></div>
+    <div class="stat"><div class="num">94%</div><div class="label">Completed without legal escalation</div></div>
+    <div class="stat"><div class="num">11.2 min</div><div class="label">Avg time per document</div></div>
+  </div>
+
+  <h3>Recent</h3>
+  <div class="conversation-card">
+    <div><strong>Aino Korhonen — Hours reduction (16h → 24h)</strong> <span class="badge green">Completed · 8 min</span></div>
+    <div class="conv-meta">Wolt Services Oy · Specialist: M. Virtanen · Co-pilot caught: pension implication for hours below 25 → reverted to 25h with HRBP confirmation</div>
+  </div>
+  <div class="conversation-card">
+    <div><strong>Olli Mäkelä — Fixed-term → permanent conversion</strong> <span class="badge green">Completed · 6 min</span></div>
+    <div class="conv-meta">Wolt Oy · Specialist: A. Salo · Co-pilot caught: existing addendum on shift work needs to carry forward; flagged probation rule waiver</div>
+  </div>
+  <div class="conversation-card">
+    <div><strong>New hire — Senior Backend Engineer (FIN)</strong> <span class="badge amber">Escalated to Counsel · 32 min</span></div>
+    <div class="conv-meta">Wolt Oy · Specialist: P. Heikkinen · Co-pilot escalated: candidate is non-EU national, requires sponsorship clauses outside standard template scope</div>
+  </div>
+  <div class="conversation-card">
+    <div><strong>WM Grocery Shift Lead — Interim role assignment</strong> <span class="badge green">Completed · 4 min</span></div>
+    <div class="conv-meta">Wolt Services Finland · Specialist: K. Laine · Co-pilot used "Template - Interim Grocery Shift Lead Amendment" as base; auto-merged shift premium per CBA</div>
+  </div>
+  <div class="conversation-card">
+    <div><strong>Termination — Performance, Wolt Oy support team</strong> <span class="badge amber">Escalated to Counsel · 45 min</span></div>
+    <div class="conv-meta">Wolt Oy · Specialist: T. Saarinen · Co-pilot escalated: termination during probation but past 4-month mark; case-specific notice question</div>
+  </div>
+</section>
+
+<!-- ============= GROUNDING ============= -->
+<section class="panel" id="panel-grounding">
+  <h2>Grounding: Real Wolt FIN Templates</h2>
+  <p class="lede">The co-pilot draws from your actual Finland template inventory. The drafts you see in chat use the same legal entities, structure, and language as today's templates — just assembled and parameterized through conversation instead of opening a Word file.</p>
+
+  <div class="callout rose">
+    <strong>What I pulled from the Drive folder:</strong> the FIN folder has 8 sub-folders (Employment Agreements, Addendums/Annexes, Termination, NDAs, Warning Letters, Employment Certificates, Visa, Other). Inside Employment Agreements alone there are 14 active templates split across legal entities (Wolt Oy, Wolt Services Oy, Wolt License Services Oy, Financial Solutions Oy, Wolt Finland 247 Operations) and contract types (permanent, fixed-term, fixed-to-permanent, monthly-paid, on-call, shift-work). The variation matters for legal correctness — but the <em>conversation</em> to gather inputs is the same.
+  </div>
+
+  <h3>Sample of what's in the corpus</h3>
+  <table>
+    <thead><tr><th>Template</th><th>Legal Entity</th><th>Use case</th><th>How co-pilot uses it</th></tr></thead>
+    <tbody>
+      <tr><td>FIN WM GA Employment Agreement (permanent)</td><td>Wolt Services Oy</td><td>Wolt Market General Associate, permanent</td><td>Default for permanent WM hires; switches to fixed-term variant if conversation reveals a defined end date</td></tr>
+      <tr><td>FIN WM GA Employment Agreement (fixed-term)</td><td>Wolt Services Oy</td><td>WM GA, fixed-term</td><td>Selected when start AND end date provided</td></tr>
+      <tr><td>FIN WM GA Employment Agreement (fixed term to permanent)</td><td>Wolt Services Oy</td><td>Conversion contract</td><td>Auto-suggested when specialist says "going permanent" about an existing fixed-term employee</td></tr>
+      <tr><td>Support Associate Employment Agreement</td><td>Wolt Oy / Wolt Finland 247 Operations</td><td>Support team hires</td><td>Co-pilot picks based on which support team (24/7 vs standard) — clarifies if ambiguous</td></tr>
+      <tr><td>Employment Agreement Full-Time Monthly Paid</td><td>Wolt License Services Oy / Financial Solutions Oy</td><td>Corp/license services hires</td><td>Co-pilot routes by hiring team's reporting line</td></tr>
+      <tr><td>Amendment to EA — Wolt Services Finland</td><td>Wolt Services Oy</td><td>Generic amendment</td><td>Used for ad-hoc changes the conversation reveals</td></tr>
+      <tr><td>Amendment to Employment Support Time Reduction</td><td>Wolt Oy</td><td>Hours reduction</td><td>Triggered when specialist says "reduce hours"; co-pilot warns on pension thresholds</td></tr>
+      <tr><td>Interim Grocery Shift Lead Amendment</td><td>Wolt Services Oy</td><td>Interim role assignment</td><td>Auto-suggested when conversation mentions "interim" + "shift lead"</td></tr>
+      <tr><td>Interim Store Team Lead Amendment</td><td>Wolt Services Oy</td><td>Interim role assignment</td><td>Same as above for store team</td></tr>
+      <tr><td>FIN WM Grocery Shift Lead addendum</td><td>Wolt Services Finland</td><td>Permanent shift lead promotion</td><td>Differentiated from interim in conversation: "is this temporary or permanent?"</td></tr>
+      <tr><td>On-Call Agreement</td><td>Wolt Oy</td><td>On-call work arrangement</td><td>Suggested when on-call hours are mentioned</td></tr>
+      <tr><td>Addendum — Support Monitoring Associate</td><td>Wolt Oy</td><td>Support monitoring role</td><td>Specific role specialization addendum</td></tr>
+      <tr><td>Support Specialist EA</td><td>Wolt Oy</td><td>Specialist hires</td><td>Standard specialist offer</td></tr>
+      <tr><td>FIN WM Store Manager CBA edition</td><td>Wolt Services Oy</td><td>Store managers under CBA</td><td>CBA-specific compensation and notice provisions</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Why this matters for v4</h3>
+  <p style="font-size:13px">v1 makes the specialist <strong>pick</strong> the right template from this list. v4 makes the specialist <strong>describe</strong> what they need; the co-pilot picks. The same 14 templates get used, but the cognitive load shifts from "which file do I open?" to "what am I actually trying to do?" — which is a much shorter conversation.</p>
+  <p style="font-size:13px">Crucially: when the specialist describes something the co-pilot can't confidently match (non-EU sponsorship, novel role, ambiguous CBA application), it <strong>escalates</strong> — exactly what the human-in-the-loop design needs.</p>
+</section>
+
+<!-- ============= NOTES ============= -->
+<section class="panel" id="panel-notes">
+  <div class="memo">
+    <h2>The Conversational Co-pilot Approach</h2>
+
+    <h3>The core paradigm shift</h3>
+    <p>The other paradigms — template engine, RAG-generated, regulation-native — aim to <strong>remove humans from the document creation loop</strong>. The conversational co-pilot aims to <strong>make humans dramatically faster while keeping them in the loop, by design</strong>.</p>
+    <p>A specialist describes the situation in natural language. The co-pilot asks structured follow-ups, surfaces context the specialist may not know (regulatory updates, edge-case rules, prior addendums), drafts the document, and allows iterative revision. The specialist signs off — they are never automated out of the workflow.</p>
+
+    <h3>Why this might be the right primary surface</h3>
+    <p>Loading a large template inventory into an agent is a strong move on the input side. But on the output side, most of the cost in document workflows is not the drafting itself — it is the judgment surrounding it. Should this person be permanent or fixed-term? Is the role still under the CBA threshold? Does this change trigger pension implications? A specialist asks themselves these questions every time. The co-pilot makes those questions explicit, surfaces what the agent knows about each, and lets the specialist decide.</p>
+
+    <h3>What this approach removes</h3>
+    <ul>
+      <li><strong>The "specialist opens a Word file" workflow.</strong> Replaced with conversation.</li>
+      <li><strong>The cognitive load of selecting the right template from a long inventory.</strong> Replaced with description-driven retrieval.</li>
+      <li><strong>The class of "I forgot to update the CBA reference" errors.</strong> The co-pilot enforces these as it drafts.</li>
+      <li><strong>The bright line between "automated" and "manual."</strong> Replaced with a spectrum: trivial cases breeze through; complex cases get more conversation; pathological cases escalate.</li>
+    </ul>
+
+    <h3>What this approach requires that does not exist today</h3>
+    <ul>
+      <li><strong>An LLM tuned for HR domain</strong>, or a strong general LLM with rich corpus and careful prompting. Achievable, but real engineering work.</li>
+      <li><strong>Conversation state management.</strong> The co-pilot must remember context across turns and across specialists working on the same employee.</li>
+      <li><strong>Confidence calibration.</strong> The agent must know when it does not know — and escalate cleanly. This is the hardest part of the system.</li>
+      <li><strong>Tight integration with HR systems.</strong> When a specialist names an employee, the co-pilot must look the record up in Workday, see the current contract, and reason from there.</li>
+    </ul>
+
+    <h3>Where humans remain in the loop</h3>
+    <ol>
+      <li><strong>Always.</strong> The specialist owns the conversation. The agent cannot finalize a document alone.</li>
+      <li><strong>Surface, don't decide.</strong> When the agent knows a relevant rule (pension threshold, CBA limit, sponsorship requirement), it surfaces it as guidance — the specialist confirms or overrides.</li>
+      <li><strong>Escalation is first-class.</strong> Cases the agent cannot confidently complete route to Counsel as part of the workflow, not as an afterthought.</li>
+      <li><strong>Audit trail is the conversation.</strong> Every piece of context surfaced and every choice made is logged.</li>
+    </ol>
+
+    <h3>Strengths</h3>
+    <ul>
+      <li><strong>Incremental.</strong> Specialists keep using the same templates, just through a different interface. No big-bang migration.</li>
+      <li><strong>Absorbs other paradigms.</strong> The co-pilot can use a RAG corpus for retrieval and pull from regulation feeds for grounding — but the human-facing surface is the conversation.</li>
+      <li><strong>High audit defensibility.</strong> "A trained HR specialist made every decision, with AI support" is a substantially easier story to tell Legal and audit than "the AI generated this autonomously."</li>
+      <li><strong>Demonstrably AI-native without overpromising.</strong> A working chat-driven document drafter looks like a real AI product — without claiming the AI is doing more than can be defensibly justified.</li>
+    </ul>
+
+    <h3>Weaknesses</h3>
+    <ul>
+      <li><strong>It does not fully eliminate human time.</strong> Approximately 11 minutes per document × 16,000 docs = ~2,933 person-hours per year. That is still significant.</li>
+      <li><strong>It depends on specialist quality.</strong> If specialists rubber-stamp the agent's draft, the result is the RAG-approach risks without the productivity unlock.</li>
+      <li><strong>It scales linearly with people.</strong> The other paradigms scale with infrastructure.</li>
+    </ul>
+
+    <h3>Where this approach fits</h3>
+    <p>The most coherent positioning is as the <em>primary surface</em> for a layered stack — the conversational interface a specialist actually uses, sitting on top of deterministic templates for high-volume cases, a RAG agent for novel cases, and a regulation layer for citations. Different cases route to different engines under the hood; the specialist sees one consistent conversation.</p>
+    <p>Product sentence: <em>"A People Ops specialist describes what they need; the system drafts it using deterministic templates where it can, generative synthesis where it has to, and live regulatory citations everywhere; the specialist reviews and signs off; everything is logged."</em></p>
+    <p>That's not three or four competing approaches. It's one product with multiple engines under it and a conversational human interface on top.</p>
+  </div>
+</section>
+
+</main>
+
+<script>
+// =============================================================
+// CONVERSATION STATE MACHINE
+// =============================================================
+const ENTITIES = {
+  'wolt-oy': 'Wolt Oy (business ID 2646674-9), Pohjoinen Rautatiekatu 21, 00100 Helsinki, Finland',
+  'wolt-services-oy': 'Wolt Services Oy (business ID 3126563-4), Pohjoinen Rautatiekatu 21, 00100 Helsinki, Finland',
+  'wolt-license-services': 'Wolt License Services Oy, Pohjoinen Rautatiekatu 21, 00100 Helsinki, Finland',
+  'financial-solutions': 'Financial Solutions Oy, Pohjoinen Rautatiekatu 21, 00100 Helsinki, Finland',
+};
+
+let convState = {
+  intent: null,
+  template: null,
+  entity: null,
+  employee: { name: null, address: null, idCode: null },
+  contract: { type: null, startDate: null, endDate: null, hours: null, salary: null, role: null },
+  flags: [],
+  conversation: [],
+  status: 'idle',
+};
+
+function specStateRender() {
+  const el = document.getElementById('spec-state');
+  const v = convState;
+  el.innerHTML = `
+    <div class="spec-state-row"><div class="spec-state-key">intent</div><div class="spec-state-val ${v.intent ? '' : 'empty'}">${v.intent || '(unknown)'}</div></div>
+    <div class="spec-state-row"><div class="spec-state-key">template</div><div class="spec-state-val ${v.template ? '' : 'empty'}">${v.template || '(not yet selected)'}</div></div>
+    <div class="spec-state-row"><div class="spec-state-key">entity</div><div class="spec-state-val ${v.entity ? '' : 'empty'}">${v.entity ? ENTITIES[v.entity] : '(unknown)'}</div></div>
+    <div class="spec-state-row"><div class="spec-state-key">employee.name</div><div class="spec-state-val ${v.employee.name ? '' : 'empty'}">${v.employee.name || '(unknown)'}</div></div>
+    <div class="spec-state-row"><div class="spec-state-key">contract.type</div><div class="spec-state-val ${v.contract.type ? '' : 'empty'}">${v.contract.type || '(unknown)'}</div></div>
+    <div class="spec-state-row"><div class="spec-state-key">contract.role</div><div class="spec-state-val ${v.contract.role ? '' : 'empty'}">${v.contract.role || '(unknown)'}</div></div>
+    <div class="spec-state-row"><div class="spec-state-key">contract.hours</div><div class="spec-state-val ${v.contract.hours ? '' : 'empty'}">${v.contract.hours || '(unknown)'}</div></div>
+    <div class="spec-state-row"><div class="spec-state-key">contract.salary</div><div class="spec-state-val ${v.contract.salary ? '' : 'empty'}">${v.contract.salary || '(unknown)'}</div></div>
+    <div class="spec-state-row"><div class="spec-state-key">contract.startDate</div><div class="spec-state-val ${v.contract.startDate ? '' : 'empty'}">${v.contract.startDate || '(unknown)'}</div></div>
+    <div class="spec-state-row"><div class="spec-state-key">flags</div><div class="spec-state-val">[${v.flags.join(', ')}]</div></div>
+    <div class="spec-state-row"><div class="spec-state-key">status</div><div class="spec-state-val">${v.status}</div></div>
+  `;
+}
+
+function toggleSpec() {
+  const el = document.getElementById('spec-state');
+  const lbl = document.getElementById('spec-toggle-label');
+  if (el.style.display === 'none') {
+    el.style.display = 'block';
+    lbl.textContent = 'Hide specialist\'s view';
+    document.querySelector('.spec-toggle').firstChild.textContent = '▾ ';
+    specStateRender();
+  } else {
+    el.style.display = 'none';
+    lbl.textContent = 'Show specialist\'s view';
+    document.querySelector('.spec-toggle').firstChild.textContent = '▸ ';
+  }
+}
+
+// =============================================================
+// CHAT RENDERING
+// =============================================================
+function addAIMsg(text, opts = {}) {
+  return new Promise(resolve => {
+    const stream = document.getElementById('chat-stream');
+    // Show typing indicator
+    const tw = document.createElement('div');
+    tw.className = 'msg ai';
+    tw.innerHTML = `<div class="msg-avatar">L</div><div class="msg-bubble"><div class="typing"><span></span><span></span><span></span></div></div>`;
+    stream.appendChild(tw);
+    stream.scrollTop = stream.scrollHeight;
+    setTimeout(() => {
+      tw.querySelector('.msg-bubble').innerHTML = text;
+      if (opts.insights) {
+        opts.insights.forEach(ins => {
+          const div = document.createElement('div');
+          div.className = 'insight ' + (ins.kind || '');
+          div.innerHTML = `<strong>${ins.label || 'FYI'}</strong>${ins.text}`;
+          tw.querySelector('.msg-bubble').appendChild(div);
+        });
+      }
+      if (opts.quickReplies && opts.quickReplies.length) {
+        const qrEl = document.createElement('div');
+        qrEl.className = 'quick-replies';
+        opts.quickReplies.forEach(qr => {
+          const b = document.createElement('button');
+          b.className = 'qr' + (qr.outline ? ' outline' : '');
+          b.textContent = qr.label;
+          b.onclick = () => qr.onClick();
+          qrEl.appendChild(b);
+        });
+        tw.querySelector('.msg-bubble').appendChild(qrEl);
+      }
+      stream.scrollTop = stream.scrollHeight;
+      resolve();
+    }, opts.delay || 600);
+  });
+}
+
+function addUserMsg(text) {
+  const stream = document.getElementById('chat-stream');
+  const w = document.createElement('div');
+  w.className = 'msg user';
+  w.innerHTML = `<div class="msg-avatar">M</div><div class="msg-bubble">${escapeHTML(text)}</div>`;
+  stream.appendChild(w);
+  stream.scrollTop = stream.scrollHeight;
+  convState.conversation.push({role: 'user', text});
+}
+
+// =============================================================
+// CONVERSATION FLOWS
+// =============================================================
+async function startConversation() {
+  setDocState('empty');
+  await addAIMsg(`Hi! I'm Lumina. I can help you draft any employment document — agreements, amendments, addendums, terminations, certificates. What do you need today?`, {
+    quickReplies: [
+      {label: 'Reduce someone\'s hours', onClick: () => userPick('I need to reduce someone\'s hours')},
+      {label: 'New hire', onClick: () => userPick('New hire — Senior Engineer in Helsinki')},
+      {label: 'Convert fixed-term to permanent', onClick: () => userPick('Aino is going from fixed-term to permanent')},
+      {label: 'Interim role', onClick: () => userPick('Assigning an interim Grocery Shift Lead')},
+      {label: 'Termination', onClick: () => userPick('Termination — performance')},
+    ],
+  });
+}
+
+function userPick(text) { document.getElementById('chat-input-text').value = ''; addUserMsg(text); routeIntent(text); }
+
+async function sendUser() {
+  const ta = document.getElementById('chat-input-text');
+  const text = ta.value.trim();
+  if (!text) return;
+  ta.value = '';
+  addUserMsg(text);
+  routeIntent(text);
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendUser(); }
+}
+
+function routeIntent(text) {
+  const t = text.toLowerCase();
+  if (!convState.intent) {
+    if (t.includes('reduce') && t.includes('hour')) flowReduceHours();
+    else if (t.includes('hire') || t.includes('new ')) flowNewHire();
+    else if (t.includes('fixed') && (t.includes('permanent') || t.includes('convert'))) flowConvertToPermanent();
+    else if (t.includes('interim')) flowInterim();
+    else if (t.includes('terminat')) flowTermination();
+    else flowUnclear();
+  } else {
+    // In-flight conversation — route to current handler
+    if (window.__currentHandler) window.__currentHandler(text);
+  }
+  specStateRender();
+}
+
+// ---- Flow: Reduce Hours ----
+async function flowReduceHours() {
+  convState.intent = 'reduce_hours';
+  convState.template = 'Amendment to Employment Support Time Reduction';
+  convState.entity = 'wolt-oy';
+  convState.status = 'collecting';
+  setDocState('collecting');
+  renderDocSkeleton('amendment_hours');
+  specStateRender();
+
+  await addAIMsg(`Got it — an hours reduction. I'll use the <strong>"Amendment to Employment Support Time Reduction"</strong> template (Wolt Oy). Who's the employee?`, {
+    insights: [{kind: 'amber', label: 'Heads up', text: 'Reductions below 25h/week trigger pension threshold (TyEL) implications. I\'ll flag if you go that low.'}],
+  });
+  window.__currentHandler = handleHoursEmployee;
+}
+
+async function handleHoursEmployee(text) {
+  convState.employee.name = extractName(text) || text;
+  renderDocSkeleton('amendment_hours');
+  specStateRender();
+  await addAIMsg(`Noted — <strong>${convState.employee.name}</strong>. I'm pulling her current contract from Workday now... she's currently at 32h/week (Support Specialist, Wolt Oy, since 2024-08-15). What's the new weekly hour count, and the effective date?`);
+  window.__currentHandler = handleHoursAmount;
+}
+
+async function handleHoursAmount(text) {
+  const hMatch = text.match(/(\d+)\s*h/i) || text.match(/(\d+)\s+hour/i) || text.match(/^(\d+)/);
+  const dMatch = text.match(/(20\d\d-\d{2}-\d{2})/) || text.match(/(\d{1,2}[\/.-]\d{1,2}[\/.-]20\d\d)/);
+  if (hMatch) convState.contract.hours = hMatch[1] + 'h';
+  if (dMatch) convState.contract.startDate = dMatch[1];
+  renderDocSkeleton('amendment_hours');
+  specStateRender();
+
+  const newHours = hMatch ? parseInt(hMatch[1], 10) : 0;
+  const insights = [];
+  if (newHours > 0 && newHours < 25) {
+    convState.flags.push('pension_threshold_warning');
+    insights.push({kind: 'rose', label: 'Stop — pension implication', text: `${newHours}h/week is below the TyEL pension contribution threshold (25h/week). Reducing here may eliminate her pension accrual. <strong>Confirm she wants this?</strong> If not, I can suggest 25h as the floor.`});
+  } else if (newHours >= 25 && newHours < 32) {
+    insights.push({kind: 'green', label: 'Looks fine', text: 'Above the TyEL threshold; no pension impact. CBA notice requirements: 14-day written notice (we\'re drafting that here).'});
+  }
+  await addAIMsg(`Updated. New hours: <strong>${convState.contract.hours || '?'}</strong>${convState.contract.startDate ? ', effective ' + convState.contract.startDate : ''}. The salary will adjust pro-rata. Want me to draft now, or anything else to add?`, {
+    insights,
+    quickReplies: [
+      {label: 'Draft now', onClick: () => draftDocument()},
+      {label: 'Add a note about reason', onClick: () => userPick('It\'s at her own request')},
+    ],
+  });
+  window.__currentHandler = handleHoursFinal;
+}
+
+async function handleHoursFinal(text) {
+  if (text.toLowerCase().includes('request') || text.toLowerCase().includes('own wish')) {
+    convState.flags.push('employee_initiated');
+    await addAIMsg(`Noted — at her own request. That actually matters: per Finnish law, employee-initiated reductions don't require the same consultation process as employer-initiated. I'll add language reflecting that. Drafting now.`, {
+      quickReplies: [{label: 'Go', onClick: () => draftDocument()}],
+    });
+  } else {
+    draftDocument();
+  }
+}
+
+// ---- Flow: New Hire ----
+async function flowNewHire() {
+  convState.intent = 'new_hire';
+  convState.entity = 'wolt-oy';
+  convState.status = 'collecting';
+  setDocState('collecting');
+  renderDocSkeleton('employment_agreement');
+  specStateRender();
+
+  await addAIMsg(`Got it — a new hire. To pick the right Finnish template, I need to know: which team, what role, and is this a <strong>permanent</strong> or <strong>fixed-term</strong> contract?`, {
+    quickReplies: [
+      {label: 'Permanent · Senior Engineer · Product team', onClick: () => userPick('Permanent, Senior Engineer, Product team')},
+      {label: 'Fixed-term · Support Associate · 247 Operations', onClick: () => userPick('Fixed-term, Support Associate, 247 Operations team')},
+      {label: 'Permanent · WM Grocery Shift Lead', onClick: () => userPick('Permanent, WM Grocery Shift Lead')},
+    ],
+  });
+  window.__currentHandler = handleHireDetails;
+}
+
+async function handleHireDetails(text) {
+  const t = text.toLowerCase();
+  if (t.includes('permanent')) convState.contract.type = 'permanent';
+  else if (t.includes('fixed-term') || t.includes('fixed term')) convState.contract.type = 'fixed_term';
+
+  if (t.includes('senior engineer') || t.includes('product')) {
+    convState.contract.role = 'Senior Engineer (Product)';
+    convState.template = 'Employment Agreement - Product (With on-call) - Wolt Oy - Monthly / Full time';
+    convState.entity = 'wolt-oy';
+  } else if (t.includes('support')) {
+    convState.contract.role = 'Support Associate';
+    convState.template = '247'.split('').some(c => t.includes(c)) ?
+      'Support Associate Employment Agreement_Wolt Finland 247 Operations' :
+      'Support Associate Employment Agreement';
+    convState.entity = 'wolt-oy';
+  } else if (t.includes('grocery shift lead') || t.includes('wm grocery')) {
+    convState.contract.role = 'WM Grocery Shift Lead';
+    convState.template = convState.contract.type === 'permanent' ?
+      'FIN WM GA Employment Agreement (permanent)' :
+      'FIN WM GA Employment Agreement (fixed-term)';
+    convState.entity = 'wolt-services-oy';
+  }
+
+  renderDocSkeleton('employment_agreement');
+  specStateRender();
+  await addAIMsg(`Selected: <strong>${convState.template}</strong> (${ENTITIES[convState.entity].split('(')[0].trim()}). Now I need: <strong>name, start date, gross monthly salary</strong>.`, {
+    insights: convState.contract.role.includes('Grocery') ? [{kind: 'amber', label: 'CBA reminder', text: 'WM Grocery roles fall under the Wolt Services Oy CBA. I\'ll auto-include CBA-specific compensation structure (shift premium, weekend bonus where applicable).'}] : [],
+  });
+  window.__currentHandler = handleHireParams;
+}
+
+async function handleHireParams(text) {
+  const nameMatch = text.match(/^([A-ZÄÖÅ][a-zäöå]+(?:\s+[A-ZÄÖÅ][a-zäöå]+)+)/);
+  const dMatch = text.match(/(20\d\d-\d{2}-\d{2})/);
+  const sMatch = text.match(/€?\s*([\d,.\s]+)\s*(?:€|EUR|euro)?/i);
+  if (nameMatch) convState.employee.name = nameMatch[1];
+  if (dMatch) convState.contract.startDate = dMatch[1];
+  if (sMatch && sMatch[1].replace(/[^\d]/g,'').length >= 4) convState.contract.salary = '€' + sMatch[1].trim();
+
+  renderDocSkeleton('employment_agreement');
+  specStateRender();
+
+  const missing = [];
+  if (!convState.employee.name) missing.push('name');
+  if (!convState.contract.startDate) missing.push('start date');
+  if (!convState.contract.salary) missing.push('salary');
+
+  if (missing.length) {
+    await addAIMsg(`Got some — still need: <strong>${missing.join(', ')}</strong>.`);
+  } else {
+    await addAIMsg(`Everything I need. One last sanity check: anything special about this hire? (sign-on bonus, equity, relocation, sponsorship, non-EU national...)`, {
+      quickReplies: [
+        {label: 'Standard — draft now', onClick: () => draftDocument()},
+        {label: 'Has sign-on bonus', onClick: () => userPick('There\'s a sign-on bonus of €5,000')},
+        {label: 'Non-EU national, needs sponsorship', onClick: () => userPick('They\'re a non-EU national, needs sponsorship')},
+      ],
+    });
+    window.__currentHandler = handleHireSpecial;
+  }
+}
+
+async function handleHireSpecial(text) {
+  const t = text.toLowerCase();
+  if (t.includes('non-eu') || t.includes('sponsor')) {
+    convState.flags.push('non_eu_sponsorship');
+    convState.status = 'escalated';
+    setDocState('drafting');
+    await addAIMsg(`<strong>Stopping here.</strong> Non-EU sponsorship requires clauses outside the standard EA template — visa-conditional language, sponsorship continuation terms, regulatory specifics. I'm escalating to Counsel.`, {
+      insights: [{kind: 'rose', label: 'Escalated', text: 'Created Counsel ticket #LEG-2026-841. ETA 1 business day. The conversation so far is attached. You\'ll be notified when it\'s ready to review.'}],
+      quickReplies: [{label: 'Draft anyway with placeholder', onClick: () => draftDocument()}],
+    });
+  } else if (t.includes('sign-on') || t.includes('bonus')) {
+    const m = text.match(/€?\s*([\d,]+)/);
+    convState.flags.push('sign_on_bonus' + (m ? ':' + m[1] : ''));
+    await addAIMsg(`Noted. Sign-on bonuses go in an addendum (separate from the main EA so it doesn't bind future terms). I'll generate both — main EA + sign-on addendum.`, {
+      quickReplies: [{label: 'Go', onClick: () => draftDocument()}],
+    });
+  } else {
+    draftDocument();
+  }
+}
+
+// ---- Flow: Convert fixed-term to permanent ----
+async function flowConvertToPermanent() {
+  convState.intent = 'convert_to_permanent';
+  convState.template = 'FIN WM GA Employment Agreement (from fixed term to permanent)';
+  convState.entity = 'wolt-services-oy';
+  convState.status = 'collecting';
+  setDocState('collecting');
+  renderDocSkeleton('conversion');
+  specStateRender();
+
+  await addAIMsg(`Conversion contract — got it. I'll use <strong>FIN WM GA Employment Agreement (from fixed term to permanent)</strong>. Two important things:`, {
+    insights: [
+      {kind: 'green', label: 'Probation waiver', text: 'Per Finnish ECA, a probation period cannot be re-applied if the employee has already worked under a fixed-term contract for the same role. I\'ll auto-omit the probation clause.'},
+      {kind: 'amber', label: 'Carry-forward addendums', text: 'I\'ll check Workday for any active addendums on her current contract (shift work, on-call, etc.) and carry them forward — let me know if you want any to lapse instead.'},
+    ],
+  });
+  await addAIMsg(`Who's converting, and effective when?`);
+  window.__currentHandler = handleConvertParams;
+}
+
+async function handleConvertParams(text) {
+  const nameMatch = text.match(/^([A-ZÄÖÅ][a-zäöå]+(?:\s+[A-ZÄÖÅ][a-zäöå]+)+)/) || [null, text.split(',')[0].trim()];
+  const dMatch = text.match(/(20\d\d-\d{2}-\d{2})/);
+  if (nameMatch[1]) convState.employee.name = nameMatch[1];
+  if (dMatch) convState.contract.startDate = dMatch[1];
+  convState.contract.role = 'WM Grocery Shift Lead';
+  convState.contract.salary = '€2,650 / month';
+
+  renderDocSkeleton('conversion');
+  specStateRender();
+  await addAIMsg(`Pulled her record: <strong>${convState.employee.name || 'Aino'}</strong>, currently fixed-term WM Grocery Shift Lead (Wolt Services Oy, since 2025-09-01), monthly €2,650, with one active <strong>shift work addendum</strong>. Carrying that forward by default. Effective ${convState.contract.startDate || '2026-06-01'}. Draft?`, {
+    quickReplies: [
+      {label: 'Draft now', onClick: () => draftDocument()},
+      {label: 'Don\'t carry forward shift addendum', onClick: () => { convState.flags.push('drop_shift_addendum'); draftDocument(); }},
+    ],
+  });
+  window.__currentHandler = () => draftDocument();
+}
+
+// ---- Flow: Interim ----
+async function flowInterim() {
+  convState.intent = 'interim_assignment';
+  convState.template = 'Interim Grocery Shift Lead Amendment';
+  convState.entity = 'wolt-services-oy';
+  convState.status = 'collecting';
+  setDocState('collecting');
+  renderDocSkeleton('interim');
+  specStateRender();
+  await addAIMsg(`Interim Grocery Shift Lead — using <strong>Interim Grocery Shift Lead Amendment</strong> (Wolt Services Oy). Who, when, and for how long?`, {
+    insights: [{kind: 'green', label: 'Interim premium', text: 'Per CBA, interim role assignments include a temporary premium for the assignment period. I\'ll calculate from current base.'}],
+  });
+  window.__currentHandler = handleInterimParams;
+}
+
+async function handleInterimParams(text) {
+  const nameMatch = text.match(/^([A-ZÄÖÅ][a-zäöå]+(?:\s+[A-ZÄÖÅ][a-zäöå]+)+)/) || [null, text.split(',')[0].trim()];
+  const dMatches = text.match(/(20\d\d-\d{2}-\d{2})/g) || [];
+  if (nameMatch[1]) convState.employee.name = nameMatch[1];
+  if (dMatches[0]) convState.contract.startDate = dMatches[0];
+  if (dMatches[1]) convState.contract.endDate = dMatches[1];
+  convState.contract.role = 'Interim Grocery Shift Lead';
+
+  renderDocSkeleton('interim');
+  specStateRender();
+  await addAIMsg(`Got <strong>${convState.employee.name}</strong>, ${convState.contract.startDate || '?'} → ${convState.contract.endDate || '?'}. Drafting.`, {
+    quickReplies: [{label: 'Go', onClick: () => draftDocument()}],
+  });
+  window.__currentHandler = () => draftDocument();
+}
+
+// ---- Flow: Termination ----
+async function flowTermination() {
+  convState.intent = 'termination';
+  convState.status = 'collecting';
+  setDocState('collecting');
+  await addAIMsg(`Termination — sensitive territory. Before drafting anything, I need to understand the situation.`, {
+    insights: [{kind: 'rose', label: 'I\'ll likely escalate', text: 'Most performance-based terminations in Finland require Counsel review first because of process requirements (warnings, hearing, notice). I\'ll prepare the conversation summary either way.'}],
+    quickReplies: [
+      {label: 'Performance — past probation', onClick: () => userPick('Performance, past probation')},
+      {label: 'Mutual agreement', onClick: () => userPick('Mutual agreement, both parties want to part ways')},
+      {label: 'Probation period', onClick: () => userPick('Still in probation period')},
+    ],
+  });
+  window.__currentHandler = handleTermType;
+}
+
+async function handleTermType(text) {
+  const t = text.toLowerCase();
+  if (t.includes('performance') && !t.includes('probation')) {
+    convState.flags.push('performance_termination');
+    convState.status = 'escalated';
+    setDocState('drafting');
+    await addAIMsg(`Escalating. Performance termination after probation requires: documented warnings, hearing process, statutory notice. I'll create the Counsel ticket and pull a draft separation agreement as starting context for them.`, {
+      insights: [{kind: 'rose', label: 'Escalated', text: 'Counsel ticket #LEG-2026-842. The conversation, employee record, and prior warnings (if logged) are attached. Counsel handles drafting from here.'}],
+    });
+    document.getElementById('doc-paper').innerHTML = `<h1 class="doc-title">Escalated to Counsel</h1><p style="text-align:center; color:var(--slate)">Performance terminations require Counsel review. <br>Conversation summary and employee context have been forwarded.</p>`;
+    setDocState('ready');
+  } else if (t.includes('mutual')) {
+    convState.template = 'Mutual termination agreement';
+    convState.entity = 'wolt-oy';
+    await addAIMsg(`Mutual termination — much cleaner. I can draft this directly. Who, effective when, and is there a separation payment?`);
+    window.__currentHandler = handleTermMutual;
+  } else if (t.includes('probation')) {
+    convState.template = 'Probation period termination';
+    await addAIMsg(`Probation termination — straightforward. Who, effective date, and the reason (which I'll keep brief in the doc per Finnish norms)?`);
+    window.__currentHandler = handleTermProbation;
+  }
+}
+
+async function handleTermMutual(text) {
+  const nameMatch = text.match(/^([A-ZÄÖÅ][a-zäöå]+(?:\s+[A-ZÄÖÅ][a-zäöå]+)+)/) || [null, text.split(',')[0].trim()];
+  const dMatch = text.match(/(20\d\d-\d{2}-\d{2})/);
+  if (nameMatch[1]) convState.employee.name = nameMatch[1];
+  if (dMatch) convState.contract.endDate = dMatch[1];
+  await addAIMsg(`Drafting mutual termination for ${convState.employee.name}, effective ${convState.contract.endDate || '?'}.`, {
+    quickReplies: [{label: 'Go', onClick: () => draftDocument()}],
+  });
+  window.__currentHandler = () => draftDocument();
+}
+async function handleTermProbation(text) {
+  const nameMatch = text.match(/^([A-ZÄÖÅ][a-zäöå]+(?:\s+[A-ZÄÖÅ][a-zäöå]+)+)/) || [null, text.split(',')[0].trim()];
+  if (nameMatch[1]) convState.employee.name = nameMatch[1];
+  await addAIMsg(`Drafting probation termination for ${convState.employee.name}.`, { quickReplies: [{label: 'Go', onClick: () => draftDocument()}] });
+  window.__currentHandler = () => draftDocument();
+}
+
+// ---- Flow: unclear ----
+async function flowUnclear() {
+  await addAIMsg(`I'm not sure I caught that — could you describe what kind of document you need? E.g., "new hire," "amendment," "termination," "certificate"...`);
+}
+
+// =============================================================
+// DOC RENDERING
+// =============================================================
+function setDocState(state) {
+  const pill = document.getElementById('doc-state-pill');
+  pill.className = 'doc-state-pill ' + state;
+  pill.textContent = ({empty: 'Empty', collecting: 'Collecting info', drafting: 'Drafting', ready: 'Ready for review'})[state];
+}
+
+function known(v, fallback = '____________') { return v ? `<span class="field-known">${escapeHTML(v)}</span>` : `<span class="field-pending">${fallback}</span>`; }
+
+function renderDocSkeleton(kind) {
+  const paper = document.getElementById('doc-paper');
+  paper.classList.remove('empty');
+  const v = convState;
+  const today = new Date().toLocaleDateString('en-US', {year: 'numeric', month: 'long', day: 'numeric'});
+
+  if (kind === 'amendment_hours') {
+    paper.innerHTML = `
+      <h1 class="doc-title">Amendment to Employment Agreement</h1>
+      <p>This Amendment to Employment Agreement (the "Amendment") is entered into on ${known(today, today)} between:</p>
+      <p>(1) <strong>${ENTITIES['wolt-oy']}</strong> (the "Company"); and</p>
+      <p>(2) ${known(v.employee.name, '[Employee name]')} (personal identity code ${known(v.employee.idCode, '[code]')}), residing at ${known(v.employee.address, '[address]')} (the "Employee").</p>
+      <div class="doc-section-h">Fixed Term Change of Working Hours</div>
+      <p>The weekly working hours shall be ${known(v.contract.hours, '[hours]')} from ${known(v.contract.startDate, '[start]')} onwards${v.contract.endDate ? ' and until ' + known(v.contract.endDate, '[end]') : ''}${v.flags.includes('employee_initiated') ? ' due to the request of the employee\'s own wish' : ''}.</p>
+      <p>The Employee's monthly salary will be adjusted according to the weekly hours agreed above.</p>
+      <div class="doc-section-h">Other Provisions</div>
+      <p>This Amendment shall be governed by and construed in accordance with the laws of Finland. Any dispute arising out of or relating to this Amendment shall be settled by the District Court of Helsinki as the first instance.</p>
+      <p>In Helsinki, Finland</p>
+      <p>WOLT OY    EMPLOYEE</p>
+      <p>_________________    _________________</p>
+    `;
+  } else if (kind === 'employment_agreement') {
+    paper.innerHTML = `
+      <h1 class="doc-title">Employment Agreement</h1>
+      <p>This Employment Agreement is entered into on ${today} between:</p>
+      <p>(1) <strong>${ENTITIES[v.entity || 'wolt-oy']}</strong> (the "Employer"); and</p>
+      <p>(2) ${known(v.employee.name, '[Employee name]')} (the "Employee").</p>
+      <div class="doc-section-h">1. Position and Duties</div>
+      <p>The Employee is engaged as ${known(v.contract.role, '[role]')}, reporting to the team specified in the appointment letter.</p>
+      <div class="doc-section-h">2. Term</div>
+      <p>This is a ${known(v.contract.type === 'permanent' ? 'permanent' : (v.contract.type === 'fixed_term' ? 'fixed-term' : '[contract type]'), '[type]')} engagement, commencing ${known(v.contract.startDate, '[start date]')}.</p>
+      <div class="doc-section-h">3. Compensation</div>
+      <p>The Employee's gross monthly salary shall be ${known(v.contract.salary, '[salary]')}, payable per the standard payroll cycle.${v.flags.some(f => f.startsWith('sign_on_bonus')) ? '<br><span class="new-content">A separate sign-on addendum will be issued covering the agreed bonus.</span>' : ''}</p>
+      <div class="doc-section-h">4. Working Hours</div>
+      <p>Standard working hours follow the applicable Finnish Employment Contracts Act and any applicable collective bargaining agreement.</p>
+      <div class="doc-section-h">5. Probation</div>
+      <p>${v.contract.type === 'permanent' ? 'A probation period of 6 months applies, in accordance with the Finnish Employment Contracts Act §1:4.' : '[Probation provisions per contract type]'}</p>
+      <div class="doc-section-h">6. Other Provisions</div>
+      <p>This Agreement shall be governed by Finnish law. Any dispute shall be settled by the District Court of Helsinki.</p>
+    `;
+  } else if (kind === 'conversion') {
+    paper.innerHTML = `
+      <h1 class="doc-title">Employment Agreement (Fixed-Term to Permanent)</h1>
+      <p>This Agreement is entered into between:</p>
+      <p>(1) <strong>${ENTITIES['wolt-services-oy']}</strong>; and</p>
+      <p>(2) ${known(v.employee.name, '[Employee name]')}.</p>
+      <div class="doc-section-h">Recitals</div>
+      <p>The Employee has been employed under a fixed-term contract since 2025-09-01 in the role of ${known(v.contract.role, 'WM Grocery Shift Lead')}. The Parties wish to convert this to a permanent engagement.</p>
+      <div class="doc-section-h">1. Conversion to Permanent</div>
+      <p>Effective ${known(v.contract.startDate, '[effective date]')}, the Employee's engagement is converted to a permanent contract.</p>
+      <div class="doc-section-h">2. No Probation Period</div>
+      <p><span class="new-content">No probation period applies, in accordance with Finnish Employment Contracts Act — the Employee has already worked in the same role under fixed-term arrangement.</span></p>
+      <div class="doc-section-h">3. Compensation & Benefits</div>
+      <p>Gross monthly salary remains ${known(v.contract.salary, '€2,650')}; benefits and accrued service continue uninterrupted.</p>
+      <div class="doc-section-h">4. Carry-Forward Provisions</div>
+      <p>${v.flags.includes('drop_shift_addendum') ? 'The existing shift work addendum lapses with this conversion.' : '<span class="new-content">The existing shift work addendum carries forward without modification.</span>'}</p>
+      <div class="doc-section-h">5. Other Provisions</div>
+      <p>This Agreement is governed by Finnish law and the applicable CBA.</p>
+    `;
+  } else if (kind === 'interim') {
+    paper.innerHTML = `
+      <h1 class="doc-title">Interim Grocery Shift Lead Amendment</h1>
+      <p>This Amendment is entered into between <strong>${ENTITIES['wolt-services-oy']}</strong> and ${known(v.employee.name, '[Employee name]')}.</p>
+      <div class="doc-section-h">1. Interim Assignment</div>
+      <p>The Employee is assigned to the interim role of <strong>Grocery Shift Lead</strong> from ${known(v.contract.startDate, '[start]')} until ${known(v.contract.endDate, '[end]')}.</p>
+      <div class="doc-section-h">2. Compensation Premium</div>
+      <p>For the duration of this assignment, the Employee receives an interim role premium per the applicable CBA. Standard base salary continues unchanged; premium is paid as a separate line item.</p>
+      <div class="doc-section-h">3. Reversion</div>
+      <p>Upon expiration of this Amendment, the Employee reverts to her prior role and compensation, unless a separate agreement extends or converts the assignment.</p>
+    `;
+  } else {
+    paper.classList.add('empty');
+    paper.innerHTML = `<div>The document will appear here as the conversation progresses.</div>`;
+  }
+  specStateRender();
+}
+
+async function draftDocument() {
+  setDocState('drafting');
+  await addAIMsg(`Drafting now... <em>(in production this would use the matched template + your inputs + applicable rules)</em>`);
+  setTimeout(() => {
+    setDocState('ready');
+    addAIMsg(`Done. Review the draft on the right. Want me to revise anything, or send for signature?`, {
+      quickReplies: [
+        {label: 'Looks good — send to DocuSign', onClick: () => finalize()},
+        {label: 'Change something', onClick: () => userPick('Change the effective date')},
+      ],
+    });
+  }, 800);
+}
+
+async function finalize() {
+  await addAIMsg(`Routing to DocuSign and Workday. The full conversation log + draft has been saved to the audit record. <strong>You're done. Thanks!</strong>`, {
+    insights: [{kind: 'green', label: 'Logged', text: 'Conversation ID: LUM-2026-00482 · Audit record contains every decision surfaced and your responses.'}],
+  });
+}
+
+// =============================================================
+// HELPERS
+// =============================================================
+function extractName(text) {
+  const m = text.match(/([A-ZÄÖÅ][a-zäöå]+(?:\s+[A-ZÄÖÅ][a-zäöå]+)+)/);
+  return m ? m[1] : null;
+}
+
+function escapeHTML(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function resetChat() {
+  document.getElementById('chat-stream').innerHTML = '';
+  convState = {
+    intent: null, template: null, entity: null,
+    employee: { name: null, address: null, idCode: null },
+    contract: { type: null, startDate: null, endDate: null, hours: null, salary: null, role: null },
+    flags: [], conversation: [], status: 'idle',
+  };
+  window.__currentHandler = null;
+  document.getElementById('doc-paper').classList.add('empty');
+  document.getElementById('doc-paper').innerHTML = `The document will appear here as the conversation progresses.<br><br>Each piece of information you give the co-pilot fills in another field. Edge cases and regulatory context are surfaced as we go.`;
+  setDocState('empty');
+  specStateRender();
+  startConversation();
+}
+
+// =============================================================
+// INIT
+// =============================================================
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('panel-' + t.dataset.tab).classList.add('active');
+  });
+});
+specStateRender();
+startConversation();
+</script>
+
+</body>
+</html>

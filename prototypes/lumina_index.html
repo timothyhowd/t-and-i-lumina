@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Document Automation — Approaches Considered</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root {
+    --ink: #0f172a;
+    --ink-2: #334155;
+    --muted: #64748b;
+    --line: #e2e8f0;
+    --bg: #f8fafc;
+    --card: #ffffff;
+    --accent: #ea580c;
+    --accent-soft: #fff7ed;
+    --good: #16a34a; --good-soft: #f0fdf4;
+    --warn: #d97706; --warn-soft: #fffbeb;
+    --stop: #dc2626; --stop-soft: #fef2f2;
+    --v1: #ea580c;
+    --v2: #7c3aed;
+    --v3: #0d9488;
+    --v4: #e11d48;
+    --recommended: #0f172a;
+    --shadow-1: 0 1px 2px rgba(15,23,42,0.04);
+    --shadow-2: 0 4px 12px rgba(15,23,42,0.06);
+    --shadow-3: 0 8px 32px rgba(15,23,42,0.08);
+    --radius: 10px;
+  }
+  *,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    font-family: -apple-system, "Inter", "Segoe UI", sans-serif;
+    color: var(--ink); background: var(--bg);
+    line-height: 1.6; font-size: 14.5px;
+    -webkit-font-smoothing: antialiased;
+  }
+  header.top {
+    background: white;
+    border-bottom: 1px solid var(--line);
+    padding: 24px 32px;
+  }
+  header.top .breadcrumb { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 8px; font-weight: 600; }
+  header.top h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; color: var(--ink); }
+  header.top .sub { font-size: 14px; color: var(--ink-2); margin-top: 6px; max-width: 740px; }
+  nav.toc {
+    position: sticky; top: 0; background: white; border-bottom: 1px solid var(--line);
+    padding: 10px 32px; display: flex; gap: 18px; overflow-x: auto;
+    z-index: 10;
+  }
+  nav.toc a {
+    color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 500;
+    white-space: nowrap; padding: 4px 0;
+  }
+  nav.toc a:hover { color: var(--ink); }
+  main { padding: 32px; max-width: 1140px; margin: 0 auto; }
+  section { margin-bottom: 40px; }
+  h2 {
+    font-size: 20px; font-weight: 700; letter-spacing: -0.01em;
+    margin-bottom: 14px; color: var(--ink);
+  }
+  h3 { font-size: 15px; font-weight: 600; margin: 22px 0 10px; color: var(--ink-2); }
+  p { margin-bottom: 12px; color: var(--ink-2); line-height: 1.7; }
+  ul, ol { margin: 10px 0 16px 22px; }
+  li { margin-bottom: 6px; color: var(--ink-2); }
+  strong { color: var(--ink); }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 22px 24px;
+    margin-bottom: 16px;
+  }
+  .card.tight { padding: 16px 18px; }
+
+  /* Recommended hero card */
+  .recommended-hero {
+    background: linear-gradient(135deg, var(--ink), #1e293b);
+    color: white;
+    border-radius: 14px;
+    padding: 32px 36px;
+    margin-bottom: 24px;
+    position: relative;
+    overflow: hidden;
+  }
+  .recommended-hero::before {
+    content: ""; position: absolute; top: 0; right: 0;
+    width: 240px; height: 240px;
+    background: radial-gradient(circle, rgba(234,88,12,0.18), transparent 70%);
+    pointer-events: none;
+  }
+  .recommended-hero .label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--accent); margin-bottom: 8px;
+  }
+  .recommended-hero h2 {
+    color: white; font-size: 26px; font-weight: 700; margin-bottom: 10px; letter-spacing: -0.02em;
+  }
+  .recommended-hero p {
+    color: rgba(255,255,255,0.86); font-size: 15px; line-height: 1.65; max-width: 720px;
+  }
+  .recommended-hero .open-btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--accent); color: white;
+    padding: 11px 20px; border-radius: 8px;
+    font-weight: 600; font-size: 14px;
+    text-decoration: none; margin-top: 16px;
+    transition: background 0.15s;
+  }
+  .recommended-hero .open-btn:hover { background: #c2410c; }
+  .recommended-hero .open-btn::after { content: "→"; }
+  .recommended-hero .quick-points {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px;
+    margin-top: 22px; padding-top: 22px;
+    border-top: 1px solid rgba(255,255,255,0.12);
+    position: relative; z-index: 1;
+  }
+  @media (max-width: 800px) { .recommended-hero .quick-points { grid-template-columns: 1fr; } }
+  .qp { font-size: 13px; }
+  .qp .qp-label { color: var(--accent); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 4px; }
+  .qp .qp-body { color: rgba(255,255,255,0.86); line-height: 1.55; }
+
+  /* Approach cards */
+  .approaches {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+  }
+  @media (max-width: 800px) { .approaches { grid-template-columns: 1fr; } }
+  .approach-card {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 20px 22px;
+    text-decoration: none;
+    color: inherit;
+    border-top: 3px solid var(--line);
+    transition: transform 0.15s, box-shadow 0.15s, border-top-color 0.15s;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .approach-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-2);
+  }
+  .approach-card.v1 { border-top-color: var(--v1); }
+  .approach-card.v2 { border-top-color: var(--v2); }
+  .approach-card.v3 { border-top-color: var(--v3); }
+  .approach-card.v4 { border-top-color: var(--v4); }
+  .approach-card .a-tag {
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
+    color: var(--muted);
+  }
+  .approach-card.v1 .a-tag { color: var(--v1); }
+  .approach-card.v2 .a-tag { color: var(--v2); }
+  .approach-card.v3 .a-tag { color: var(--v3); }
+  .approach-card.v4 .a-tag { color: var(--v4); }
+  .approach-card h3 { font-size: 17px; color: var(--ink); margin: 4px 0 6px; }
+  .approach-card p { font-size: 13.5px; color: var(--ink-2); line-height: 1.6; margin-bottom: 10px; }
+  .approach-card .meta {
+    display: flex; flex-wrap: wrap; gap: 12px;
+    font-size: 11.5px; color: var(--muted); margin-top: auto; padding-top: 8px;
+  }
+  .approach-card .meta strong { color: var(--ink-2); }
+  .approach-card .open {
+    margin-top: 10px; font-size: 13px; font-weight: 600;
+    color: var(--accent);
+  }
+  .approach-card.v1 .open { color: var(--v1); }
+  .approach-card.v2 .open { color: var(--v2); }
+  .approach-card.v3 .open { color: var(--v3); }
+  .approach-card.v4 .open { color: var(--v4); }
+
+  /* Comparison table */
+  .table-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--line); background: white; }
+  table.compare { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.compare th { padding: 12px 14px; text-align: left; font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--muted); background: var(--bg); border-bottom: 1px solid var(--line); font-weight: 600; }
+  table.compare th.v1 { color: var(--v1); }
+  table.compare th.v2 { color: var(--v2); }
+  table.compare th.v3 { color: var(--v3); }
+  table.compare th.v4 { color: var(--v4); }
+  table.compare th.recommended { color: var(--ink); background: var(--accent-soft); }
+  table.compare td { padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--ink-2); }
+  table.compare td.recommended { background: var(--accent-soft); color: var(--ink); }
+  table.compare td:first-child { font-weight: 600; color: var(--ink); white-space: nowrap; }
+  table.compare tr:last-child td { border-bottom: none; }
+
+  .pill {
+    display: inline-block; padding: 2px 9px; border-radius: 12px;
+    font-size: 11px; font-weight: 600; background: var(--bg); color: var(--muted);
+  }
+  .pill.good { background: var(--good-soft); color: var(--good); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.stop { background: var(--stop-soft); color: var(--stop); }
+
+  /* Question/answer blocks */
+  .qa { padding: 16px 18px; border-radius: var(--radius); margin-bottom: 12px; background: white; border: 1px solid var(--line); }
+  .qa .q { font-weight: 600; color: var(--ink); margin-bottom: 6px; font-size: 14px; }
+  .qa .a { color: var(--ink-2); font-size: 13.5px; line-height: 1.65; }
+  .qa .a strong { color: var(--ink); }
+
+  /* Architecture diagram */
+  .arch {
+    background: white; border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 24px; margin: 14px 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px; line-height: 1.85; white-space: pre;
+    overflow-x: auto; color: var(--ink-2);
+  }
+
+  .callout {
+    padding: 16px 18px; border-radius: 0 var(--radius) var(--radius) 0;
+    border-left: 4px solid var(--line);
+    margin: 16px 0;
+  }
+  .callout.warn { background: var(--warn-soft); border-left-color: var(--warn); }
+  .callout.warn strong { color: var(--warn); }
+  .callout.good { background: var(--good-soft); border-left-color: var(--good); }
+  .callout.good strong { color: var(--good); }
+  .callout.accent { background: var(--accent-soft); border-left-color: var(--accent); }
+  .callout.accent strong { color: var(--accent); }
+
+  hr.sep { border: none; border-top: 1px solid var(--line); margin: 28px 0; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="breadcrumb">Internal · Strategy</div>
+  <h1>Document Automation — Approaches Considered</h1>
+  <p class="sub">Four working prototypes exploring different paradigms for HR document automation, plus a synthesized recommendation. Each prototype is a standalone HTML file that runs in a browser; click any card to open it.</p>
+</header>
+
+<nav class="toc">
+  <a href="#summary">Summary</a>
+  <a href="#recommendation">Recommendation</a>
+  <a href="#approaches">Four approaches</a>
+  <a href="#questions">Key questions</a>
+  <a href="#compare">Comparison</a>
+  <a href="#humans">Human-in-the-loop policy</a>
+  <a href="#sequencing">Sequencing</a>
+  <a href="#vendor-scope">Vendor scope</a>
+</nav>
+
+<main>
+
+<!-- ============= SUMMARY ============= -->
+<section id="summary">
+  <h2>Summary</h2>
+  <div class="card">
+    <p>The dominant framing for document automation has been <em>"speed up the existing template-based workflow."</em> That framing is not wrong, but it under-uses what is now possible with AI, and over-fits to a vendor-led template-harmonization plan.</p>
+    <p>This document presents four prototypes, each rethinking a different part of the workflow:</p>
+    <ul>
+      <li><strong>Approach A — Template Engine.</strong> Templates as first-class artifacts with metadata, eligibility rules, and governance. Closest to the current MVP.</li>
+      <li><strong>Approach B — RAG-Generated.</strong> Templates become training data. Documents are synthesized at request time from a versioned corpus.</li>
+      <li><strong>Approach C — Regulation-Native.</strong> No internal legal language at all. Lawyers attest to <em>rules</em>, not document text. Documents assemble from authoritative sources with citations on every clause.</li>
+      <li><strong>Approach D — Conversational Co-pilot.</strong> A specialist describes what they need; the agent gathers context, surfaces edge cases, drafts, and routes to escalation when uncertain.</li>
+    </ul>
+    <p>The recommended path is not any one approach in isolation but a <strong>layered stack</strong> that combines the conversational surface of D with the engines of A, B, and C running underneath. A working demo of the synthesized stack — labelled simply <em>Lumina</em> — is the recommended primary artifact for stakeholder review.</p>
+  </div>
+</section>
+
+<!-- ============= RECOMMENDATION ============= -->
+<section id="recommendation">
+  <h2>Recommendation</h2>
+
+  <div class="recommended-hero">
+    <div class="label">Recommended approach</div>
+    <h2>Lumina — the synthesized stack</h2>
+    <p>A People Ops specialist describes what they need in plain language. Lumina drafts the document using deterministic templates where it can, retrieves precedent where it has to, and cites live regulation everywhere. The specialist reviews and signs off; everything is logged.</p>
+    <a class="open-btn" href="lumina.html">Open Lumina</a>
+
+    <div class="quick-points">
+      <div class="qp">
+        <div class="qp-label">What it preserves</div>
+        <div class="qp-body">Specialists stay in the loop, by design. Audit defensibility is high — every clause traces back to a template, precedent, or regulation.</div>
+      </div>
+      <div class="qp">
+        <div class="qp-label">What it kills</div>
+        <div class="qp-body">"Open the right Word file" workflow. "Did anyone update template X?" anxiety. The vendor template-harmonization project at full scope.</div>
+      </div>
+      <div class="qp">
+        <div class="qp-label">What it absorbs</div>
+        <div class="qp-body">Best of A, B, C, D — selected per case. Conversational surface. Deterministic engine for high volume. RAG fallback. Live regulatory citation.</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Architecture</h3>
+  <div class="arch">┌─────────────────────────────────────────────────────────────┐
+│        Lumina · Conversational Surface (from D)             │
+│   Specialist describes → agent converses → human signs off  │
+└──────┬──────────────────────────┬────────────────────┬──────┘
+       │                          │                    │
+       ▼                          ▼                    ▼
+┌─────────────┐          ┌────────────────┐    ┌──────────────┐
+│  Templates  │          │  Precedent     │    │  Regulation  │
+│  (from A)   │          │  Corpus (B)    │    │  Layer (C)   │
+│             │          │                │    │              │
+│  Default    │          │  Fallback for  │    │  Citations   │
+│  for ~80%   │          │  novel /       │    │  on every    │
+│  of cases   │          │  no-template   │    │  clause      │
+└─────────────┘          └────────────────┘    └──────────────┘
+       │                          │                    │
+       └──────────────┬───────────┴────────────────────┘
+                      ▼
+       ┌──────────────────────────────┐
+       │  Workday + DocuSign + Audit  │
+       │  (system of record)          │
+       └──────────────────────────────┘</div>
+</section>
+
+<!-- ============= APPROACHES ============= -->
+<section id="approaches">
+  <h2>The four approaches</h2>
+  <p>Each link opens a working prototype. Treat these as paradigm explorations — they exist to make the tradeoffs concrete rather than theoretical.</p>
+
+  <div class="approaches">
+    <a class="approach-card v1" href="lumina_v1_template_engine.html">
+      <div class="a-tag">Approach A · closest to current MVP</div>
+      <h3>Template Engine</h3>
+      <p>Templates are first-class artifacts. An engine routes events to the right template using declarative eligibility rules. Governance enforces structural correctness through quality gates.</p>
+      <div class="meta">
+        <span><strong>Paradigm:</strong> deterministic</span>
+        <span><strong>Build cost:</strong> low</span>
+        <span><strong>Risk:</strong> low</span>
+      </div>
+      <span class="open">Open prototype →</span>
+    </a>
+
+    <a class="approach-card v2" href="lumina_v2_rag_generated.html">
+      <div class="a-tag">Approach B · most generative</div>
+      <h3>RAG-Generated Documents</h3>
+      <p>No template registry. Historical documents become a queryable corpus. An agent retrieves relevant precedent and synthesizes a draft tailored to the specific request. New legal text is ingested into the corpus rather than edited into templates.</p>
+      <div class="meta">
+        <span><strong>Paradigm:</strong> generative</span>
+        <span><strong>Build cost:</strong> medium</span>
+        <span><strong>Risk:</strong> medium</span>
+      </div>
+      <span class="open">Open prototype →</span>
+    </a>
+
+    <a class="approach-card v3" href="lumina_v3_regulation_native.html">
+      <div class="a-tag">Approach C · most aggressive</div>
+      <h3>Regulation-Native</h3>
+      <p>No internal legal language. Lawyers attest to <em>rules</em>, not document text. Documents assemble clause-by-clause from authoritative regulatory sources with citations on every line. Roughly 200 rules instead of 900 templates per region.</p>
+      <div class="meta">
+        <span><strong>Paradigm:</strong> abstraction-layer</span>
+        <span><strong>Build cost:</strong> high</span>
+        <span><strong>Risk:</strong> high (uneven source availability)</span>
+      </div>
+      <span class="open">Open prototype →</span>
+    </a>
+
+    <a class="approach-card v4" href="lumina_v4_copilot.html">
+      <div class="a-tag">Approach D · most defensible</div>
+      <h3>Conversational Co-pilot</h3>
+      <p>The specialist describes what they need in plain language. The agent gathers context, surfaces edge cases (pension thresholds, CBA rules, sponsorship requirements), drafts, allows iterative revision, and escalates when uncertain. Human always in the loop, by design.</p>
+      <div class="meta">
+        <span><strong>Paradigm:</strong> augmentation</span>
+        <span><strong>Build cost:</strong> medium</span>
+        <span><strong>Risk:</strong> low-medium</span>
+      </div>
+      <span class="open">Open prototype →</span>
+    </a>
+  </div>
+</section>
+
+<!-- ============= QUESTIONS ============= -->
+<section id="questions">
+  <h2>Key questions, answered</h2>
+
+  <div class="qa">
+    <div class="q">Could the entire historical template inventory be loaded into an agent that generates the appropriate document at request time?</div>
+    <div class="a"><strong>Yes — that is Approach B.</strong> The corpus tab in B shows what an indexed corpus looks like; the generation tab demonstrates the agent retrieving precedent and synthesizing a draft. The "drop in legal update" tab covers the workflow for new legal language being added to the corpus.<br><br>
+      Hallucination risk and audit defensibility are real concerns at the volume of ~16,000 documents per year. The recommended Lumina stack mitigates both by wrapping the RAG capability in the conversational specialist-supervised surface from Approach D — same generative capability, with a human signing off on every output.</div>
+  </div>
+
+  <div class="qa">
+    <div class="q">If a new clause is required for documents in a particular jurisdiction, can it be applied without editing every template?</div>
+    <div class="a"><strong>Yes in B, even better in C.</strong> Approach B ingests the new clause into the corpus; the next matching generation reflects it. Approach C goes further: lawyers attest to a single new rule, and that rule applies everywhere automatically — no corpus updates, no template edits, no deployments. The "Regulation Changed Demo" tab in C walks through this end-to-end.</div>
+  </div>
+
+  <div class="qa">
+    <div class="q">Can authoritative country regulations be tapped directly, with lawyers reviewing rules instead of authoring or maintaining templates?</div>
+    <div class="a"><strong>This is the Approach C thesis.</strong> Lawyers stop reviewing documents and start <em>attesting to rules</em>: roughly 200 rules across all jurisdictions vs. 900 templates today. Same legal coverage; far less lawyer time per change.<br><br>
+      The constraint: regulatory feed availability is uneven. Some countries publish API-accessible regulatory data (e.g., Spain's BOE). Many do not. Where they do not, the rule database becomes the canonical source — still a meaningful improvement on per-template review, but not free to maintain.</div>
+  </div>
+
+  <div class="qa">
+    <div class="q">How is content updated with minimal governance overhead?</div>
+    <div class="a">Each approach answers this differently:
+      <ul>
+        <li><strong>A:</strong> Edit template → version bump → legal re-review per template. <em>Most overhead.</em></li>
+        <li><strong>B:</strong> Drop new clause into corpus → first ten generations get human review, then sampling. <em>Less overhead; statistical sampling instead of per-doc review.</em></li>
+        <li><strong>C:</strong> Regulator publishes change → rule updated → lawyer attests once → applies everywhere. <em>Minimal overhead, but only for things that map cleanly to "rules."</em></li>
+        <li><strong>D:</strong> Specialist's conversation surfaces relevant new context as it happens; agent references whichever underlying source is most current. <em>Distributed governance, always human-supervised.</em></li>
+      </ul>
+      The Lumina stack uses A's path for high-volume routine cases, B's path for novel cases, and C's regulation layer to provide the citation framework on outputs from any path.</div>
+  </div>
+
+  <div class="qa">
+    <div class="q">Where do humans definitely need to remain in the loop?</div>
+    <div class="a">Six categories, in priority:
+      <ol>
+        <li><strong>First-time generation</strong> for any new (event × country × worker class) combination — across all four approaches</li>
+        <li><strong>High-stakes outputs</strong> — senior compensation, performance terminations, cross-border employment</li>
+        <li><strong>Regulation change verification</strong> — before a new rule or clause goes live, a lawyer signs off</li>
+        <li><strong>Edge cases the system cannot confidently handle</strong> — non-EU sponsorship, unusual benefits, novel role types</li>
+        <li><strong>Sample audit</strong> — random spot-checks of generated outputs (5% in B, lower in C once attestations stabilize)</li>
+        <li><strong>Drift detection alerts</strong> — when generated outputs diverge from corpus statistics in unexpected ways</li>
+      </ol>
+      Approach D handles 1, 2, and 4 by design (the human is always in the conversation). B and C require explicit gating workflows for these cases. The Lumina stack inherits D's by-design human-in-the-loop and adds explicit gating from B and C for the additional cases.</div>
+  </div>
+</section>
+
+<!-- ============= COMPARE ============= -->
+<section id="compare">
+  <h2>Side-by-side comparison</h2>
+
+  <div class="table-wrap">
+    <table class="compare">
+      <thead>
+        <tr>
+          <th>Dimension</th>
+          <th class="v1">A · Templates</th>
+          <th class="v2">B · RAG</th>
+          <th class="v3">C · Regulation</th>
+          <th class="v4">D · Co-pilot</th>
+          <th class="recommended">Lumina (stack)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Core paradigm</td>
+          <td>Templates as artifacts</td>
+          <td>Templates as training data</td>
+          <td>Rules, not documents</td>
+          <td>AI augments human</td>
+          <td class="recommended">All four, layered</td>
+        </tr>
+        <tr>
+          <td>"Drop in new clause" works?</td>
+          <td>Edit each template</td>
+          <td><span class="pill good">Ingest into corpus</span></td>
+          <td><span class="pill good">Attest one rule</span></td>
+          <td><span class="pill good">Surfaces in conversation</span></td>
+          <td class="recommended"><span class="pill good">Per case, best route</span></td>
+        </tr>
+        <tr>
+          <td>Adding 901st template costs</td>
+          <td>One template + governance</td>
+          <td><span class="pill good">~zero (corpus row)</span></td>
+          <td><span class="pill good">~zero (rules cover it)</span></td>
+          <td><span class="pill good">~zero</span></td>
+          <td class="recommended"><span class="pill good">~zero</span></td>
+        </tr>
+        <tr>
+          <td>Lawyer time per change</td>
+          <td>Per-template review</td>
+          <td>Sampling + first-time</td>
+          <td><span class="pill good">Per-rule attestation</span></td>
+          <td>Escalation only</td>
+          <td class="recommended">Risk-weighted by case</td>
+        </tr>
+        <tr>
+          <td>Audit defensibility</td>
+          <td><span class="pill good">"Rendered template v3.2"</span></td>
+          <td><span class="pill warn">"AI synthesized from corpus"</span></td>
+          <td><span class="pill good">"Each clause cited"</span></td>
+          <td><span class="pill good">"Specialist made each call"</span></td>
+          <td class="recommended"><span class="pill good">All three signals on the same doc</span></td>
+        </tr>
+        <tr>
+          <td>Hallucination risk</td>
+          <td><span class="pill good">None</span></td>
+          <td><span class="pill warn">Real, mitigated</span></td>
+          <td><span class="pill good">Low (extractive)</span></td>
+          <td><span class="pill good">Caught in conversation</span></td>
+          <td class="recommended"><span class="pill good">Conversation + citations</span></td>
+        </tr>
+        <tr>
+          <td>Time per document</td>
+          <td>~0 min (automated)</td>
+          <td>~0 min</td>
+          <td>~0 min</td>
+          <td>~5–15 min (specialist)</td>
+          <td class="recommended">~5–15 min for complex; ~0 for routine</td>
+        </tr>
+        <tr>
+          <td>Scales to 16,000+ docs/year</td>
+          <td><span class="pill good">Trivially</span></td>
+          <td><span class="pill good">Yes</span></td>
+          <td><span class="pill good">Yes</span></td>
+          <td><span class="pill warn">Linearly with specialists</span></td>
+          <td class="recommended"><span class="pill good">Yes — routine cases automated</span></td>
+        </tr>
+        <tr>
+          <td>Best for</td>
+          <td>High-volume, low-variation</td>
+          <td>Novel cases registry can't match</td>
+          <td>Regulation-heavy with API feeds</td>
+          <td>Complex cases needing judgment</td>
+          <td class="recommended">All of the above</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============= HUMANS ============= -->
+<section id="humans">
+  <h2>Human-in-the-loop policy</h2>
+
+  <div class="card">
+    <h3 style="margin-top:0">Always</h3>
+    <ul>
+      <li>First-time generation for any new (event × country × worker class) combination</li>
+      <li>Compensation packages above €150K, or any senior leadership offer</li>
+      <li>Cross-border employment (employee country ≠ entity country)</li>
+      <li>Non-EU sponsorship situations</li>
+      <li>Performance terminations past probation</li>
+      <li>Any case where the agent's confidence falls below threshold (escalation as a first-class workflow)</li>
+    </ul>
+
+    <h3>Conditionally</h3>
+    <ul>
+      <li>Regulation change rollout: first ten outputs after a corpus update or rule change</li>
+      <li>Drift alerts: when generated outputs diverge from corpus statistics</li>
+      <li>Random sampling: 5% of all generated docs, async/weekly</li>
+    </ul>
+
+    <h3>Never</h3>
+    <ul>
+      <li>Routine variable resolution (employee name, start date, role title)</li>
+      <li>Template selection when only one matches eligibility cleanly</li>
+      <li>Routing to DocuSign vs. AskHR delivery based on signature requirement</li>
+      <li>Storing in Workday under the determined category</li>
+      <li>Notifying signers, sending nudges, logging completion</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============= SEQUENCING ============= -->
+<section id="sequencing">
+  <h2>Suggested sequencing</h2>
+  <div class="card">
+    <ol>
+      <li><strong>Phase 1 — Wolt MVP (no change):</strong> Ship the upload-automation MVP as planned. Approach A is the right thing for that scope and timeline.</li>
+      <li><strong>Phase 2 — Conversational surface:</strong> Build the Lumina conversation interface using existing templates as the primary backend. This is the demo most likely to land with stakeholders.</li>
+      <li><strong>Phase 3 — RAG fallback:</strong> Pilot Approach B as a fallback engine inside Lumina — invoked only when no template matches. Specialist still in loop; risk low.</li>
+      <li><strong>Phase 4 — Regulation pilot:</strong> Pilot Approach C in <em>one country</em> (e.g., Spain — BOE is API-accessible). Use it to learn what rule attestation means in practice.</li>
+      <li><strong>Phase 5 — Decision:</strong> Decide whether C expands to two or three additional countries based on the pilot, and whether Lumina becomes the default surface or remains specialist-only.</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ============= VENDOR SCOPE ============= -->
+<section id="vendor-scope">
+  <h2>Implication for the vendor RFI</h2>
+  <div class="callout warn">
+    <p><strong>Recommended scope reduction:</strong> the four-pillar vendor scope can be cut by approximately three-quarters without losing the work that actually requires external expertise.</p>
+    <ul>
+      <li><strong>Keep:</strong> Pillar I (legal/data matrix) for the regulation pilot in one country at a time, not all jurisdictions upfront.</li>
+      <li><strong>Cut:</strong> Pillar II (modular template development). The Lumina architecture replaces it. Modular legal text creates re-review burden on legal counsel and combinatorial state explosion.</li>
+      <li><strong>Cut:</strong> Pillar III (end-to-end design and rollout). This is the platform work to own internally.</li>
+      <li><strong>Cut:</strong> Pillar IV (governance and maintenance). This is the operating model to own forever; vendors can advise on initial design but cannot own it.</li>
+    </ul>
+    <p style="margin-bottom:0;">Net: vendor scope drops materially; internal platform scope grows; total program cost is lower; and the organization owns a real platform instead of inheriting a vendor-built artifact.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Risks acknowledged</h2>
+
+  <div class="card">
+    <h3 style="margin-top:0">If only Approach A ships</h3>
+    <p>The MVP is solved on time. The existing operating model is reinforced. The opportunity to lead on AI-native HR operations is missed. The vendor RFI proceeds, and the wrong stack is inherited.</p>
+
+    <h3>If Approach B or C is adopted unilaterally</h3>
+    <p>Risk of overcommitting on infrastructure that is not yet proven. Hallucination incidents in B or rule-extraction errors in C could create real legal exposure at scale. Timeline slips become likely.</p>
+
+    <h3>If Approach D ships alone</h3>
+    <p>It scales linearly with specialists. Rough math: 11 minutes × 16,000 documents = ~2,933 person-hours per year. That's not the productivity unlock the program needs at full scale. Without an automated engine underneath, the labor savings are limited.</p>
+
+    <h3>The risk of the layered Lumina recommendation</h3>
+    <p>It is harder to explain than a single-paradigm answer. Stakeholders will tend to pull toward one approach. Discipline on <em>what each layer is for</em> is required — without it, the result is three half-built systems instead of one stack with three engines.</p>
+  </div>
+</section>
+
+</main>
+
+</body>
+</html>

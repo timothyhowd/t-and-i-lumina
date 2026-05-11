@@ -1,0 +1,1876 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lumina — Document Drafting</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  /* Design system — calm, confident, low ornament. */
+  :root {
+    --ink: #0f172a;
+    --ink-2: #334155;
+    --muted: #64748b;
+    --line: #e2e8f0;
+    --bg: #f8fafc;
+    --card: #ffffff;
+
+    --accent: #ea580c;        /* Lumina brand accent */
+    --accent-soft: #fff7ed;
+    --accent-ring: #fed7aa;
+
+    --good: #16a34a;
+    --good-soft: #f0fdf4;
+    --warn: #d97706;
+    --warn-soft: #fffbeb;
+    --stop: #dc2626;
+    --stop-soft: #fef2f2;
+
+    --brand-dd: #EB1700;
+    --brand-wolt: #00C2E8;
+    --brand-roo: #00CCBC;
+
+    --shadow-1: 0 1px 2px rgba(15,23,42,0.04);
+    --shadow-2: 0 4px 12px rgba(15,23,42,0.06);
+    --shadow-3: 0 8px 32px rgba(15,23,42,0.08);
+
+    --radius: 10px;
+    --radius-sm: 6px;
+    --radius-lg: 14px;
+  }
+  *,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    line-height: 1.55;
+    font-size: 14px;
+    height: 100%;
+    -webkit-font-smoothing: antialiased;
+  }
+  body { display: flex; flex-direction: column; min-height: 100vh; }
+
+  /* Top bar */
+  header.top {
+    background: white;
+    border-bottom: 1px solid var(--line);
+    padding: 14px 28px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-shrink: 0;
+  }
+  .wordmark {
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .wordmark .lumen {
+    width: 18px; height: 18px;
+    background: linear-gradient(135deg, var(--accent), #fb923c);
+    border-radius: 50%;
+    box-shadow: 0 0 0 4px var(--accent-soft);
+  }
+  .top-meta {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--muted);
+    display: flex; gap: 14px; align-items: center;
+  }
+  .top-meta .who {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .avatar-sm {
+    width: 24px; height: 24px; border-radius: 50%;
+    background: var(--ink); color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600;
+  }
+
+  /* Tabs */
+  nav.tabs {
+    background: white;
+    border-bottom: 1px solid var(--line);
+    padding: 0 28px;
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .tab {
+    padding: 12px 14px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .tab.active {
+    color: var(--ink);
+    border-bottom-color: var(--accent);
+  }
+  .tab:hover:not(.active) { color: var(--ink-2); }
+
+  main { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .panel { display: none; flex: 1; flex-direction: column; min-height: 0; }
+  .panel.active { display: flex; }
+
+  /* Generate panel layout */
+  .stage {
+    flex: 1; min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(440px, 1fr) minmax(480px, 1.1fr);
+  }
+  @media (max-width: 1100px) {
+    .stage { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+  }
+
+  /* Chat side */
+  .chat-side {
+    display: flex; flex-direction: column;
+    border-right: 1px solid var(--line);
+    background: white;
+    min-width: 0;
+    min-height: 0;
+  }
+  .chat-stream {
+    flex: 1; overflow-y: auto;
+    padding: 24px 28px;
+    display: flex; flex-direction: column; gap: 14px;
+    min-height: 0;
+  }
+  .msg { max-width: 86%; display: flex; gap: 10px; }
+  .msg.assistant { align-self: flex-start; }
+  .msg.user { align-self: flex-end; flex-direction: row-reverse; }
+  .msg-avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600;
+  }
+  .msg.assistant .msg-avatar {
+    background: linear-gradient(135deg, var(--accent), #fb923c);
+    color: white;
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  .msg.user .msg-avatar {
+    background: var(--ink); color: white;
+  }
+  .msg-bubble {
+    padding: 10px 14px;
+    border-radius: var(--radius);
+    font-size: 13.5px;
+    line-height: 1.55;
+    box-shadow: var(--shadow-1);
+  }
+  .msg.assistant .msg-bubble {
+    background: white;
+    border: 1px solid var(--line);
+    border-top-left-radius: 4px;
+  }
+  .msg.user .msg-bubble {
+    background: var(--ink);
+    color: white;
+    border-top-right-radius: 4px;
+  }
+  .msg-bubble strong { color: var(--ink); }
+  .msg.user .msg-bubble strong { color: white; }
+  .msg-bubble code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    background: var(--bg);
+    padding: 1px 6px;
+    border-radius: 4px;
+    color: var(--ink);
+  }
+  .msg.user .msg-bubble code { background: rgba(255,255,255,0.15); color: white; }
+
+  .typing { display: inline-flex; gap: 3px; padding: 4px 0; }
+  .typing span {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--muted);
+    animation: typing 1.2s ease-in-out infinite;
+  }
+  .typing span:nth-child(2) { animation-delay: 0.15s; }
+  .typing span:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes typing {
+    0%, 80%, 100% { opacity: 0.3; transform: scale(0.85); }
+    40% { opacity: 1; transform: scale(1.2); }
+  }
+
+  /* Inline tooltips/insights inside messages */
+  .insight {
+    margin-top: 8px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12.5px;
+    line-height: 1.5;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+  .insight .icon {
+    font-size: 14px;
+    flex-shrink: 0;
+    line-height: 1.4;
+  }
+  .insight .body { flex: 1; }
+  .insight .label {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    margin-bottom: 2px;
+  }
+  .insight.regulation { background: var(--accent-soft); color: #7c2d12; border-left: 3px solid var(--accent); }
+  .insight.regulation .label { color: var(--accent); }
+  .insight.precedent { background: #ecfeff; color: #0e7490; border-left: 3px solid #06b6d4; }
+  .insight.precedent .label { color: #0e7490; }
+  .insight.warning { background: var(--warn-soft); color: #78350f; border-left: 3px solid var(--warn); }
+  .insight.warning .label { color: var(--warn); }
+  .insight.stop { background: var(--stop-soft); color: #7f1d1d; border-left: 3px solid var(--stop); }
+  .insight.stop .label { color: var(--stop); }
+  .insight.good { background: var(--good-soft); color: #14532d; border-left: 3px solid var(--good); }
+  .insight.good .label { color: var(--good); }
+
+  /* Quick replies */
+  .quick-replies {
+    margin-top: 10px;
+    display: flex; flex-wrap: wrap; gap: 6px;
+  }
+  .qr {
+    background: white;
+    border: 1px solid var(--accent-ring);
+    color: var(--accent);
+    padding: 6px 12px;
+    border-radius: 18px;
+    font-size: 12.5px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .qr:hover { background: var(--accent-soft); border-color: var(--accent); }
+  .qr.muted { border-color: var(--line); color: var(--muted); }
+  .qr.muted:hover { background: var(--bg); border-color: var(--ink-2); color: var(--ink-2); }
+
+  /* Composer */
+  .composer {
+    border-top: 1px solid var(--line);
+    padding: 14px 28px 18px;
+    background: white;
+    flex-shrink: 0;
+  }
+  .composer-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+  }
+  .composer textarea {
+    flex: 1;
+    resize: none;
+    min-height: 42px;
+    max-height: 140px;
+    padding: 10px 16px;
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    font-size: 13.5px;
+    font-family: inherit;
+    line-height: 1.45;
+    background: var(--bg);
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .composer textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: white;
+  }
+  .composer button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 22px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .composer button:hover { background: #c2410c; }
+  .composer button:disabled { background: var(--muted); cursor: not-allowed; }
+  .composer-hint {
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  /* Doc side */
+  .doc-side {
+    display: flex; flex-direction: column;
+    background: var(--bg);
+    min-width: 0;
+    min-height: 0;
+  }
+  .doc-bar {
+    padding: 12px 24px;
+    background: white;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .doc-bar-title { font-weight: 600; font-size: 13.5px; }
+  .doc-bar-actions { display: flex; gap: 8px; align-items: center; }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    background: var(--bg);
+    color: var(--muted);
+  }
+  .pill::before {
+    content: "";
+    width: 6px; height: 6px; border-radius: 50%;
+    background: currentColor;
+  }
+  .pill.collecting { background: #eff6ff; color: #2563eb; }
+  .pill.drafting { background: var(--warn-soft); color: var(--warn); }
+  .pill.ready { background: var(--good-soft); color: var(--good); }
+  .btn-ghost {
+    background: transparent;
+    border: 1px solid var(--line);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--ink-2);
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .btn-ghost:hover { background: var(--bg); }
+
+  /* Brand switcher */
+  .brand-switch {
+    display: inline-flex;
+    background: var(--bg);
+    padding: 3px;
+    border-radius: 8px;
+    gap: 2px;
+    border: 1px solid var(--line);
+  }
+  .brand-chip {
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    color: var(--muted);
+    border: none;
+    background: transparent;
+    font-family: inherit;
+    line-height: 1.2;
+  }
+  .brand-chip:hover { color: var(--ink); }
+  .brand-chip.active {
+    background: white;
+    box-shadow: 0 1px 2px rgba(15,23,42,0.06);
+  }
+  .brand-chip.active[data-brand="doordash"] { color: var(--brand-dd); }
+  .brand-chip.active[data-brand="wolt-oy"],
+  .brand-chip.active[data-brand="wolt-services"] { color: var(--brand-wolt); }
+  .brand-chip.active[data-brand="deliveroo"] { color: var(--brand-roo); }
+
+  .doc-stage {
+    flex: 1;
+    overflow-y: auto;
+    padding: 28px 32px 40px;
+    min-height: 0;
+  }
+
+  /* Document paper */
+  .paper {
+    background: white;
+    max-width: 720px;
+    margin: 0 auto;
+    border-radius: 4px;
+    box-shadow: var(--shadow-3);
+    overflow: hidden;
+    position: relative;
+    transition: opacity 0.3s;
+  }
+  .paper.empty {
+    background: transparent;
+    box-shadow: none;
+    border: 1px dashed var(--line);
+    text-align: center;
+    padding: 80px 32px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .paper.empty .empty-icon {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: var(--bg);
+    margin: 0 auto 14px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted);
+    font-size: 18px;
+  }
+
+  .letterhead {
+    padding: 28px 40px 18px;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .letterhead .brand-mark {
+    height: 32px;
+    flex-shrink: 0;
+  }
+  .letterhead .brand-mark svg { height: 100%; width: auto; }
+  .letterhead .legal-entity {
+    text-align: right;
+    font-size: 10px;
+    color: var(--muted);
+    line-height: 1.5;
+    font-family: -apple-system, "Inter", sans-serif;
+    max-width: 260px;
+  }
+  .doc-body {
+    padding: 24px 40px 8px;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 13.5px;
+    line-height: 1.85;
+    color: var(--ink);
+  }
+  .doc-meta-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11.5px;
+    color: var(--muted);
+    margin-bottom: 18px;
+    font-family: -apple-system, "Inter", sans-serif;
+  }
+  .doc-title {
+    font-family: -apple-system, "Inter", sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    text-align: center;
+    color: var(--ink);
+    margin: 8px 0 24px;
+  }
+  .doc-section-h {
+    font-family: -apple-system, "Inter", sans-serif;
+    font-weight: 600;
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--ink);
+    margin: 22px 0 6px;
+  }
+  .doc-body p { margin-bottom: 12px; }
+  .field {
+    background: var(--good-soft);
+    color: #14532d;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-weight: 500;
+    transition: background 0.4s;
+  }
+  .field.pending {
+    background: var(--warn-soft);
+    color: #78350f;
+    font-style: italic;
+  }
+  sup.cite {
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 9.5px;
+    cursor: help;
+    margin-left: 1px;
+    vertical-align: super;
+  }
+  sup.cite:hover { text-decoration: underline; }
+  .new-content {
+    background: var(--accent-soft);
+    padding: 1px 5px;
+    border-radius: 3px;
+    animation: highlight 3s ease-out forwards;
+  }
+  @keyframes highlight {
+    0% { background: #fde68a; }
+    100% { background: var(--accent-soft); }
+  }
+  .signatures {
+    display: flex;
+    gap: 36px;
+    padding: 24px 40px 28px;
+    border-top: 1px solid var(--line);
+    margin-top: 14px;
+  }
+  .sig-block {
+    flex: 1;
+    border-top: 1px solid var(--ink);
+    padding-top: 6px;
+    font-size: 10.5px;
+    color: var(--muted);
+    font-family: -apple-system, "Inter", sans-serif;
+  }
+  .sig-block .sig-name { color: var(--ink); font-weight: 600; font-size: 12px; }
+
+  .footnotes {
+    padding: 18px 40px 24px;
+    border-top: 1px dashed var(--line);
+    font-size: 10.5px;
+    line-height: 1.6;
+    color: var(--muted);
+    font-family: -apple-system, "Inter", sans-serif;
+  }
+  .footnotes-title {
+    font-weight: 600;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--ink-2);
+    margin-bottom: 6px;
+  }
+  .footnote { margin-bottom: 4px; opacity: 0; transition: opacity 0.4s; }
+  .footnote.visible { opacity: 1; }
+  .footnote .num { color: var(--accent); font-weight: 700; margin-right: 4px; }
+
+  /* Behind-the-scenes panel */
+  .bts {
+    background: white;
+    border-top: 1px solid var(--line);
+    flex-shrink: 0;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease-out;
+  }
+  .bts.open { max-height: 280px; }
+  .bts-content {
+    padding: 14px 28px 18px;
+    overflow-y: auto;
+    max-height: 280px;
+  }
+  .bts-toggle {
+    padding: 8px 28px;
+    background: white;
+    border-top: 1px solid var(--line);
+    font-size: 11px;
+    color: var(--muted);
+    cursor: pointer;
+    user-select: none;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .bts-toggle:hover { color: var(--ink-2); }
+  .bts-toggle .arrow { transition: transform 0.2s; display: inline-block; }
+  .bts-toggle.open .arrow { transform: rotate(90deg); }
+  .bts-row {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 10px;
+    padding: 6px 0;
+    font-size: 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  .bts-row:last-child { border-bottom: none; }
+  .bts-key {
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+  }
+  .bts-val { color: var(--ink); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; }
+  .bts-val.muted { color: var(--muted); font-style: italic; }
+  .bts-tag {
+    display: inline-block;
+    background: var(--accent-soft);
+    color: var(--accent);
+    padding: 1px 8px;
+    border-radius: 3px;
+    font-size: 10.5px;
+    font-weight: 600;
+    margin-right: 4px;
+    font-family: -apple-system, "Inter", sans-serif;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .bts-tag.precedent { background: #ecfeff; color: #0e7490; }
+  .bts-tag.template { background: #eff6ff; color: #2563eb; }
+  .bts-tag.regulation { background: var(--accent-soft); color: var(--accent); }
+
+  /* History panel */
+  .panel-padding {
+    padding: 28px;
+    overflow-y: auto;
+    flex: 1;
+  }
+  .hero-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+  @media (max-width: 800px) { .hero-stats { grid-template-columns: 1fr 1fr; } }
+  .stat {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+  }
+  .stat .num {
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--ink);
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+  .stat .label {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .stat .trend {
+    font-size: 11px;
+    color: var(--good);
+    margin-top: 4px;
+  }
+
+  .section-h {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin: 18px 0 10px;
+  }
+
+  .history-row {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    margin-bottom: 10px;
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    gap: 16px;
+    align-items: center;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .history-row:hover { border-color: var(--accent-ring); box-shadow: var(--shadow-2); }
+  .history-row .hr-icon {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .history-row .hr-meta { min-width: 0; }
+  .history-row .hr-title { font-weight: 600; color: var(--ink); margin-bottom: 2px; font-size: 13.5px; }
+  .history-row .hr-detail { font-size: 12px; color: var(--muted); }
+  .history-row .hr-status { font-size: 11px; color: var(--muted); text-align: right; min-width: 80px; }
+  .history-row .hr-time { font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+  /* About panel */
+  .about-content { max-width: 720px; }
+  .about-content h2 {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+  }
+  .about-content p {
+    color: var(--ink-2);
+    font-size: 14.5px;
+    line-height: 1.7;
+    margin-bottom: 14px;
+  }
+  .about-content h3 {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 24px 0 8px;
+  }
+  .pillars { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin: 14px 0; }
+  @media (max-width: 800px) { .pillars { grid-template-columns: 1fr; } }
+  .pillar {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 18px;
+  }
+  .pillar h4 {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+  .pillar p { font-size: 13px; color: var(--ink-2); line-height: 1.6; margin: 0; }
+
+  ul.lean { list-style: none; padding: 0; margin: 14px 0; }
+  ul.lean li {
+    padding: 8px 0 8px 24px;
+    border-bottom: 1px solid var(--line);
+    position: relative;
+    font-size: 13.5px;
+    color: var(--ink-2);
+  }
+  ul.lean li:last-child { border-bottom: none; }
+  ul.lean li::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 17px;
+    width: 6px; height: 6px;
+    background: var(--accent);
+    border-radius: 50%;
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wordmark"><span class="lumen"></span>Lumina</div>
+  <nav class="tabs" id="tabs" style="background:transparent; border:none; padding:0; margin-left:24px;">
+    <div class="tab active" data-tab="generate">Generate</div>
+    <div class="tab" data-tab="history">History</div>
+    <div class="tab" data-tab="about">About</div>
+  </nav>
+  <div class="top-meta">
+    <div class="who">
+      <div class="avatar-sm">M</div>
+      <span>People Ops · Wolt FIN</span>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<!-- ============= GENERATE ============= -->
+<section class="panel active" id="panel-generate">
+  <div class="stage">
+    <div class="chat-side">
+      <div class="chat-stream" id="chat-stream"></div>
+      <div class="composer">
+        <div class="composer-row">
+          <textarea id="composer-input" rows="1" placeholder="Describe what you need..." onkeydown="handleKey(event)"></textarea>
+          <button onclick="sendMessage()">Send</button>
+        </div>
+        <div class="composer-hint">Try: "Reduce Aino's hours" · "New hire — Senior Engineer in Helsinki" · "Convert Olli from fixed-term to permanent"</div>
+      </div>
+    </div>
+    <div class="doc-side">
+      <div class="doc-bar">
+        <div class="doc-bar-title">Live draft</div>
+        <div class="doc-bar-actions">
+          <div class="brand-switch" id="brand-switch">
+            <button class="brand-chip" data-brand="wolt-oy" onclick="setBrand('wolt-oy')">Wolt</button>
+            <button class="brand-chip" data-brand="doordash" onclick="setBrand('doordash')">DoorDash</button>
+            <button class="brand-chip" data-brand="deliveroo" onclick="setBrand('deliveroo')">Deliveroo</button>
+          </div>
+          <span class="pill" id="doc-status">Empty</span>
+          <button class="btn-ghost" onclick="resetSession()">New</button>
+        </div>
+      </div>
+      <div class="doc-stage" id="doc-stage">
+        <div class="paper empty" id="paper">
+          <div class="empty-icon">📝</div>
+          The document will appear here as the conversation progresses. Each piece of context fills in another field. Regulatory citations and precedent are added automatically; you'll see them highlighted as they land.
+        </div>
+      </div>
+      <div class="bts-toggle" id="bts-toggle" onclick="toggleBTS()">
+        <span class="arrow">▸</span> What's happening behind the scenes
+      </div>
+      <div class="bts" id="bts">
+        <div class="bts-content" id="bts-content">
+          <div style="color: var(--muted); font-size: 12px; text-align:center; padding: 8px 0;">
+            Engine activity will appear here as the conversation progresses.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============= HISTORY ============= -->
+<section class="panel" id="panel-history">
+  <div class="panel-padding">
+    <div class="hero-stats">
+      <div class="stat">
+        <div class="num">2,847</div>
+        <div class="label">Documents this quarter</div>
+        <div class="trend">+18% vs Q4</div>
+      </div>
+      <div class="stat">
+        <div class="num">11.2 min</div>
+        <div class="label">Avg time per doc</div>
+        <div class="trend">−68% vs prior workflow</div>
+      </div>
+      <div class="stat">
+        <div class="num">94%</div>
+        <div class="label">Completed without escalation</div>
+      </div>
+      <div class="stat">
+        <div class="num">100%</div>
+        <div class="label">Regulatory citations on every clause</div>
+      </div>
+    </div>
+
+    <div class="section-h">Recent activity</div>
+    <div id="history-list"></div>
+  </div>
+</section>
+
+<!-- ============= ABOUT ============= -->
+<section class="panel" id="panel-about">
+  <div class="panel-padding">
+    <div class="about-content">
+      <h2>How Lumina works</h2>
+      <p>Lumina drafts employment documents through a conversation. A specialist describes the situation in plain language; Lumina identifies the right document, gathers the necessary context, surfaces relevant constraints, and produces a draft. The specialist reviews, revises, and signs off.</p>
+      <p>Behind the conversation, three engines work together. None of them is exposed in the user experience — but each contributes to the final document.</p>
+
+      <div class="pillars">
+        <div class="pillar">
+          <h4>Templates</h4>
+          <p>For standard, high-volume situations, Lumina uses approved templates with structural correctness enforced — variables, signature flow, retention category. Adding a new template is configuration, not engineering.</p>
+        </div>
+        <div class="pillar">
+          <h4>Precedent corpus</h4>
+          <p>The historical document library is indexed and queryable. When a request doesn't fit a clean template, Lumina retrieves comparable past documents and synthesizes from precedent — with the specialist confirming each output.</p>
+        </div>
+        <div class="pillar">
+          <h4>Live regulation</h4>
+          <p>For jurisdictions with machine-readable regulatory feeds, Lumina queries authoritative sources at draft time. Every clause traces back to a specific statute, collective bargaining agreement, or regulatory provision — visible as footnotes on the document.</p>
+        </div>
+      </div>
+
+      <h3>Where humans remain in the loop</h3>
+      <p>The specialist is always in the conversation — Lumina cannot finalize a document on its own. Beyond that, three classes of cases route to additional human review:</p>
+      <ul class="lean">
+        <li><strong>First-time generations</strong> for any new (event × country × worker class) combination</li>
+        <li><strong>High-stakes outputs</strong> — senior compensation, cross-border employment, performance terminations</li>
+        <li><strong>Regulation changes</strong> — first ten outputs after a rule update receive mandatory legal review</li>
+      </ul>
+
+      <h3>What's logged</h3>
+      <p>Every conversation, every piece of context surfaced by the agent, every choice the specialist made, and every regulatory citation on the final document — together they form the audit record. The conversation itself is part of the legal evidence, not just the document.</p>
+
+      <h3>Coverage today</h3>
+      <p>Lumina supports document generation across employment lifecycle events: hires, role changes, compensation adjustments, amendments, terminations, and certificates. Active jurisdictions: Finland, Spain, United States, Germany, United Kingdom. Active brand entities: DoorDash, Wolt, Deliveroo.</p>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ============= LOGOS (inline SVG, referenced from script) ============= -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="logo-doordash" viewBox="0 0 145 28">
+      <text x="0" y="22" font-family="-apple-system, Inter, sans-serif" font-weight="800" font-size="24" fill="#EB1700" letter-spacing="-0.5">DoorDash</text>
+    </symbol>
+    <symbol id="logo-wolt" viewBox="0 0 60 28">
+      <text x="0" y="22" font-family="-apple-system, Inter, sans-serif" font-weight="800" font-size="24" fill="#00C2E8" letter-spacing="-0.5">wolt</text>
+    </symbol>
+    <symbol id="logo-deliveroo" viewBox="0 0 130 28">
+      <text x="0" y="22" font-family="-apple-system, Inter, sans-serif" font-weight="800" font-size="24" fill="#00CCBC" letter-spacing="-0.5">deliveroo</text>
+    </symbol>
+  </defs>
+</svg>
+
+<script>
+// =============================================================
+// BRAND CONFIG
+// =============================================================
+const BRANDS = {
+  doordash: {
+    label: 'DoorDash, Inc.',
+    color: '#EB1700',
+    logo: 'logo-doordash',
+    addr: '303 2nd Street, San Francisco, CA 94107, United States',
+  },
+  wolt: {
+    label: 'Wolt Enterprises Oy',
+    color: '#00C2E8',
+    logo: 'logo-wolt',
+    addr: 'Pohjoinen Rautatiekatu 21, 00100 Helsinki, Finland',
+  },
+  'wolt-services': {
+    label: 'Wolt Services Oy',
+    color: '#00C2E8',
+    logo: 'logo-wolt',
+    addr: 'Business ID 3126563-4 · Pohjoinen Rautatiekatu 21, 00100 Helsinki, Finland',
+  },
+  'wolt-oy': {
+    label: 'Wolt Oy',
+    color: '#00C2E8',
+    logo: 'logo-wolt',
+    addr: 'Business ID 2646674-9 · Pohjoinen Rautatiekatu 21, 00100 Helsinki, Finland',
+  },
+  deliveroo: {
+    label: 'Deliveroo Holdings Ltd.',
+    color: '#00CCBC',
+    logo: 'logo-deliveroo',
+    addr: 'The River Building, Cannon Bridge House, London EC4R 3TE, United Kingdom',
+  },
+};
+
+// =============================================================
+// SESSION STATE
+// =============================================================
+let session = freshSession();
+function freshSession() {
+  return {
+    intent: null,
+    docKind: null,
+    template: null,
+    brand: 'wolt-oy',
+    employee: { name: null, role: null, currentRole: null, idCode: null, address: null, tenureSince: null },
+    contract: { type: null, startDate: null, endDate: null, hours: null, salary: null, prevSalary: null, prevHours: null },
+    flags: [],
+    citations: [],
+    sources: { templates: [], precedent: [], regulation: [] },
+    status: 'idle',
+    handler: null,
+  };
+}
+
+// =============================================================
+// CHAT RENDERING
+// =============================================================
+function addAssistant(html, opts = {}) {
+  return new Promise(resolve => {
+    const stream = document.getElementById('chat-stream');
+    const wrap = document.createElement('div');
+    wrap.className = 'msg assistant';
+    wrap.innerHTML = `<div class="msg-avatar">L</div><div class="msg-bubble"><div class="typing"><span></span><span></span><span></span></div></div>`;
+    stream.appendChild(wrap);
+    stream.scrollTop = stream.scrollHeight;
+
+    setTimeout(() => {
+      const bubble = wrap.querySelector('.msg-bubble');
+      bubble.innerHTML = html;
+      if (opts.insights) {
+        opts.insights.forEach(ins => {
+          const div = document.createElement('div');
+          div.className = 'insight ' + (ins.kind || 'precedent');
+          div.innerHTML = `<div class="icon">${ins.icon || 'ℹ️'}</div><div class="body"><span class="label">${ins.label}</span>${ins.text}</div>`;
+          bubble.appendChild(div);
+        });
+      }
+      if (opts.replies) {
+        const qrEl = document.createElement('div');
+        qrEl.className = 'quick-replies';
+        opts.replies.forEach(r => {
+          const b = document.createElement('button');
+          b.className = 'qr' + (r.muted ? ' muted' : '');
+          b.textContent = r.label;
+          b.onclick = () => r.onClick();
+          qrEl.appendChild(b);
+        });
+        bubble.appendChild(qrEl);
+      }
+      stream.scrollTop = stream.scrollHeight;
+      resolve();
+    }, opts.delay || 600);
+  });
+}
+
+function addUser(text) {
+  const stream = document.getElementById('chat-stream');
+  const wrap = document.createElement('div');
+  wrap.className = 'msg user';
+  wrap.innerHTML = `<div class="msg-avatar">M</div><div class="msg-bubble">${escapeHTML(text)}</div>`;
+  stream.appendChild(wrap);
+  stream.scrollTop = stream.scrollHeight;
+}
+
+// =============================================================
+// COMPOSER
+// =============================================================
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+}
+function sendMessage() {
+  const ta = document.getElementById('composer-input');
+  const text = ta.value.trim();
+  if (!text) return;
+  ta.value = '';
+  routeUserInput(text);
+}
+function quickPick(text) {
+  routeUserInput(text);
+}
+function routeUserInput(text) {
+  addUser(text);
+  // Detect brand-switch intent first — it can fire mid-conversation
+  const switched = detectBrandSwitch(text);
+  if (switched) { renderBTS(); return; }
+  if (!session.intent) {
+    detectIntent(text);
+  } else if (session.handler) {
+    session.handler(text);
+  }
+  renderBTS();
+}
+
+function detectBrandSwitch(text) {
+  const t = text.toLowerCase();
+  let target = null;
+  if (/\b(doordash|dd|door dash)\b/.test(t)) target = 'doordash';
+  else if (/\bwolt\s*services\b/.test(t)) target = 'wolt-services';
+  else if (/\bwolt\b/.test(t)) target = 'wolt-oy';
+  else if (/\b(deliveroo|roo)\b/.test(t)) target = 'deliveroo';
+  if (!target || target === session.brand) return false;
+  // Only auto-switch if the message looks like a brand-change request
+  if (!/(switch|change|make.*it|use|move|flip|to)/.test(t)) return false;
+  setBrand(target);
+  return true;
+}
+
+async function setBrand(brandKey) {
+  if (!BRANDS[brandKey]) return;
+  session.brand = brandKey;
+  // Update the chip UI
+  document.querySelectorAll('.brand-chip').forEach(c => {
+    c.classList.toggle('active', c.dataset.brand === brandKey ||
+      (brandKey === 'wolt-services' && c.dataset.brand === 'wolt-oy'));
+  });
+  // Re-render the paper if a doc is in flight
+  if (session.docKind) renderPaper();
+  await addAssistant(
+    `Switched to <strong>${BRANDS[brandKey].label}</strong>. Letterhead and address updated; the document body remains. <em>(In production this would also re-route any jurisdiction-specific clauses through the regulation layer.)</em>`
+  );
+}
+
+// =============================================================
+// INTENT DETECTION
+// =============================================================
+function detectIntent(text) {
+  const t = text.toLowerCase();
+  if (/(reduce|cut|lower|drop)\s.*(hour|time)/.test(t) || /work less|fewer hours/.test(t)) flowReduceHours();
+  else if (/(new hire|hire|hiring|onboard|engaging|joining)/.test(t)) flowNewHire();
+  else if (/(fixed.term|temp).*(permanent|perm)|(permanent|perm).*(fixed|temp)|convert/.test(t)) flowConversion();
+  else if (/(interim|temporary role|acting)/.test(t)) flowInterim();
+  else if (/(termin|sever|let.*go|fire|dismiss)/.test(t)) flowTermination();
+  else if (/(promot|step.up|level.up)/.test(t)) flowPromotion();
+  else flowUnknown();
+}
+
+// =============================================================
+// FLOWS
+// =============================================================
+async function flowReduceHours() {
+  session.intent = 'reduce_hours';
+  session.docKind = 'amendment_hours';
+  session.template = 'Amendment to Employment — Time Reduction';
+  session.brand = 'wolt-oy';
+  session.status = 'collecting';
+  session.sources.templates.push('Amendment to Employment Support Time Reduction · Wolt Oy');
+  setDocStatus('collecting');
+  renderPaper();
+
+  await addAssistant(
+    `Got it — an hours reduction. I'll use the <strong>Time Reduction Amendment</strong> for Wolt Oy. Who's the employee?`,
+    {
+      insights: [{
+        kind: 'precedent', icon: '📚', label: 'Precedent',
+        text: '8 similar amendments in the past 12 months — same template, same legal entity. Standard structure applies.',
+      }],
+    }
+  );
+  session.handler = handleHoursEmployee;
+  renderBTS();
+}
+
+async function handleHoursEmployee(text) {
+  const name = extractName(text) || titleCase(text.split(',')[0].trim());
+  session.employee.name = name;
+  session.employee.tenureSince = '2024-08-15';
+  session.employee.currentRole = 'Support Specialist';
+  session.contract.prevHours = '32h';
+  session.contract.prevSalary = '€2,840 / month';
+  session.sources.precedent.push(`Workday record — ${name} · current contract pulled`);
+  renderPaper();
+  renderBTS();
+
+  await addAssistant(
+    `Pulled <strong>${name}</strong>'s record from Workday — Support Specialist, Wolt Oy, joined 2024-08-15, currently 32h/week at €2,840/month. What are the new hours and the effective date?`
+  );
+  session.handler = handleHoursAmount;
+}
+
+async function handleHoursAmount(text) {
+  const hMatch = text.match(/(\d+)\s*h/i) || text.match(/(\d+)\s*hour/i);
+  const dMatch = text.match(/(20\d\d-\d{2}-\d{2})/);
+  if (hMatch) session.contract.hours = hMatch[1] + 'h';
+  if (dMatch) session.contract.startDate = dMatch[1];
+
+  const newHours = hMatch ? parseInt(hMatch[1], 10) : 0;
+  const newSalary = newHours ? '€' + Math.round(2840 * (newHours / 32)).toLocaleString() + ' / month' : null;
+  if (newSalary) session.contract.salary = newSalary;
+
+  // Regulation check (live)
+  session.sources.regulation.push('Finnish Employment Contracts Act §10 (material change)');
+  session.sources.regulation.push('TyEL — Employees Pensions Act, contribution threshold');
+
+  const insights = [];
+  if (newHours > 0 && newHours < 25) {
+    session.flags.push('pension_threshold');
+    insights.push({
+      kind: 'stop', icon: '⚠️', label: 'Stop · regulatory check',
+      text: `<strong>${newHours}h/week falls below the TyEL pension contribution threshold (25h).</strong> At this level, statutory pension accrual stops. Confirm the employee understands and consents — or set the floor at 25h.`,
+    });
+  } else if (newHours >= 25 && newHours < 32) {
+    insights.push({
+      kind: 'good', icon: '✓', label: 'Regulatory check passed',
+      text: 'Above the TyEL threshold; pension contributions continue. CBA notice (14 days, written) is satisfied by this amendment.',
+    });
+  }
+  insights.push({
+    kind: 'precedent', icon: '📚', label: 'From precedent',
+    text: 'Most reductions in this template ask whether the change is at the employee\'s request. Want me to add that?',
+  });
+
+  renderPaper();
+  renderBTS();
+  await addAssistant(
+    `Updated. New: <strong>${session.contract.hours}/week · ${session.contract.salary || 'pro-rated salary'}${session.contract.startDate ? ' · effective ' + session.contract.startDate : ''}</strong>.`,
+    {
+      insights,
+      replies: [
+        { label: 'It\'s at her request', onClick: () => quickPick('It\'s at her request') },
+        { label: 'Employer-driven', onClick: () => quickPick('Employer-driven, business need'), muted: true },
+        { label: 'Draft as-is', onClick: () => draftAndComplete(), muted: true },
+      ],
+    }
+  );
+  session.handler = handleHoursReason;
+}
+
+async function handleHoursReason(text) {
+  const t = text.toLowerCase();
+  if (t.includes('request') || t.includes('her wish') || t.includes('own')) {
+    session.flags.push('employee_initiated');
+    await addAssistant(`Noted — at her own request. Per Finnish law, employee-initiated reductions don't trigger the consultation process for employer-initiated changes. I'll reflect that. Drafting now.`);
+  } else if (t.includes('employer') || t.includes('business')) {
+    session.flags.push('employer_initiated');
+    await addAssistant(`Got it — employer-initiated. The Employment Contracts Act §10 consultation requirements may apply depending on the duration. I'll add neutral language and flag for HRBP review.`, {
+      insights: [{ kind: 'warning', icon: '⚡', label: 'Process check', text: 'Employer-initiated material changes can require co-determination consultation if the position falls under the Act on Co-operation within Undertakings. HRBP review recommended.' }],
+    });
+  }
+  renderPaper();
+  draftAndComplete();
+}
+
+async function flowNewHire() {
+  session.intent = 'new_hire';
+  session.docKind = 'employment_agreement';
+  session.brand = 'wolt-oy';
+  session.status = 'collecting';
+  setDocStatus('collecting');
+  renderPaper();
+
+  await addAssistant(
+    `New hire — got it. Three things to lock in first: <strong>permanent or fixed-term?</strong> What role and team? Which legal entity?`,
+    {
+      replies: [
+        { label: 'Permanent · Senior Engineer (Product) · Wolt Oy', onClick: () => quickPick('Permanent, Senior Engineer Product team, Wolt Oy') },
+        { label: 'Permanent · WM Grocery Shift Lead · Wolt Services', onClick: () => quickPick('Permanent, WM Grocery Shift Lead, Wolt Services Oy') },
+        { label: 'Fixed-term · Support Associate · 24/7 Operations', onClick: () => quickPick('Fixed-term, Support Associate, 24/7 Operations') },
+      ],
+    }
+  );
+  session.handler = handleHireSetup;
+}
+
+async function handleHireSetup(text) {
+  const t = text.toLowerCase();
+  if (/permanent|perm/.test(t)) session.contract.type = 'permanent';
+  else if (/fixed.term|temp/.test(t)) session.contract.type = 'fixed_term';
+
+  if (/senior engineer|product/.test(t)) {
+    session.employee.role = 'Senior Engineer (Product)';
+    session.template = 'Employment Agreement — Product (with on-call) · Wolt Oy';
+    session.brand = 'wolt-oy';
+  } else if (/grocery|wm|shift lead/.test(t)) {
+    session.employee.role = 'WM Grocery Shift Lead';
+    session.template = `FIN WM GA Employment Agreement (${session.contract.type === 'permanent' ? 'permanent' : 'fixed-term'}) · Wolt Services Oy`;
+    session.brand = 'wolt-services';
+  } else if (/support/.test(t)) {
+    session.employee.role = 'Support Associate';
+    session.template = 'Support Associate Employment Agreement · Wolt Oy 24/7 Operations';
+    session.brand = 'wolt-oy';
+  }
+  session.sources.templates.push(session.template);
+  renderPaper();
+  renderBTS();
+
+  const insights = [];
+  if (session.employee.role && session.employee.role.includes('Grocery')) {
+    insights.push({ kind: 'regulation', icon: '⚖️', label: 'CBA applies', text: 'WM Grocery roles fall under the Wolt Services Oy CBA — shift premium, weekend bonus, and CBA-specific notice provisions auto-included.' });
+    session.sources.regulation.push('Wolt Services Oy CBA · §6 working hours, §11 shift premium');
+  }
+
+  await addAssistant(
+    `Selected: <strong>${session.template}</strong>. Now I need <strong>name, start date, and gross monthly salary</strong>.`,
+    { insights }
+  );
+  session.handler = handleHireDetails;
+}
+
+async function handleHireDetails(text) {
+  const nameMatch = extractName(text);
+  const dMatch = text.match(/(20\d\d-\d{2}-\d{2})/);
+  const sMatch = text.match(/€?\s*([\d,.]+)\s*€?/);
+  if (nameMatch) session.employee.name = nameMatch;
+  if (dMatch) session.contract.startDate = dMatch[1];
+  if (sMatch && sMatch[1].replace(/[^\d]/g,'').length >= 4) session.contract.salary = '€' + sMatch[1].replace(/\s/g,'').trim();
+
+  renderPaper();
+  renderBTS();
+
+  const missing = [];
+  if (!session.employee.name) missing.push('name');
+  if (!session.contract.startDate) missing.push('start date');
+  if (!session.contract.salary) missing.push('salary');
+  if (missing.length) {
+    await addAssistant(`Got some — still need: <strong>${missing.join(', ')}</strong>.`);
+    return;
+  }
+
+  await addAssistant(
+    `Everything I need to draft. Anything special — sign-on bonus, equity, relocation, sponsorship?`,
+    {
+      replies: [
+        { label: 'Standard hire — draft', onClick: () => draftAndComplete() },
+        { label: 'Sign-on bonus · €5,000', onClick: () => quickPick('Sign-on bonus of €5,000') },
+        { label: 'Non-EU national, sponsorship', onClick: () => quickPick('Non-EU national, needs sponsorship'), muted: true },
+      ],
+    }
+  );
+  session.handler = handleHireSpecial;
+}
+
+async function handleHireSpecial(text) {
+  const t = text.toLowerCase();
+  if (t.includes('non-eu') || t.includes('sponsor')) {
+    session.flags.push('non_eu_sponsorship');
+    session.status = 'escalated';
+    setDocStatus('drafting');
+    await addAssistant(
+      `<strong>Stopping here.</strong> Non-EU sponsorship requires clauses outside the standard EA template — visa-conditional language, sponsorship continuation, regulatory specifics. Escalating to Counsel.`,
+      {
+        insights: [{ kind: 'stop', icon: '⏸', label: 'Escalated', text: 'Counsel ticket created. The conversation so far is attached. ETA 1 business day.' }],
+      }
+    );
+    document.getElementById('paper').classList.add('empty');
+    document.getElementById('paper').innerHTML = `<div class="empty-icon">⏸</div><strong>Escalated to Counsel.</strong><br>Non-EU sponsorship is outside the standard template scope. Conversation summary forwarded with Counsel ticket.`;
+    setDocStatus('ready');
+  } else if (t.includes('sign-on') || t.includes('bonus')) {
+    const m = text.match(/€?\s*([\d,]+)/);
+    session.flags.push('sign_on_bonus' + (m ? ':' + m[1] : ''));
+    await addAssistant(`Noted. Sign-on bonuses go in a separate addendum so they don't bind future terms. I'll generate both — main agreement + addendum.`);
+    draftAndComplete();
+  } else {
+    draftAndComplete();
+  }
+}
+
+async function flowConversion() {
+  session.intent = 'convert';
+  session.docKind = 'conversion';
+  session.template = 'FIN WM GA Employment Agreement (fixed-term to permanent) · Wolt Services Oy';
+  session.brand = 'wolt-services';
+  session.status = 'collecting';
+  session.sources.templates.push(session.template);
+  setDocStatus('collecting');
+  renderPaper();
+
+  await addAssistant(
+    `Conversion to permanent. I'll use the <strong>fixed-term to permanent</strong> template. Two heads-ups before we start:`,
+    {
+      insights: [
+        { kind: 'good', icon: '✓', label: 'Probation auto-omitted', text: 'Per Finnish Employment Contracts Act §1:4, no new probation period applies if the employee has worked the same role under fixed-term arrangement. Standard for this template.' },
+        { kind: 'precedent', icon: '📚', label: 'Carry-forward addendums', text: 'I\'ll check Workday for any active addendums on the current contract (shift work, on-call, etc.) and carry them forward — flag any you want to lapse.' },
+      ],
+    }
+  );
+  await addAssistant(`Who's converting, and what's the effective date?`);
+  session.handler = handleConversionDetails;
+}
+
+async function handleConversionDetails(text) {
+  const name = extractName(text) || titleCase(text.split(',')[0].trim());
+  const dMatch = text.match(/(20\d\d-\d{2}-\d{2})/);
+  session.employee.name = name;
+  session.employee.role = 'WM Grocery Shift Lead';
+  session.employee.tenureSince = '2025-09-01';
+  session.contract.salary = '€2,650 / month';
+  if (dMatch) session.contract.startDate = dMatch[1];
+  session.sources.precedent.push(`Workday record — ${name} · existing fixed-term + shift work addendum`);
+  session.sources.regulation.push('Finnish Employment Contracts Act §1:4 (probation rule)');
+  renderPaper();
+  renderBTS();
+
+  await addAssistant(
+    `Found her: <strong>${name}</strong>, fixed-term WM Grocery Shift Lead at Wolt Services Oy since 2025-09-01, €2,650/month, with one active <strong>shift work addendum</strong>. Carrying it forward by default.`,
+    {
+      replies: [
+        { label: 'Looks right — draft', onClick: () => draftAndComplete() },
+        { label: 'Drop the shift addendum', onClick: () => { session.flags.push('drop_shift_addendum'); draftAndComplete(); }, muted: true },
+      ],
+    }
+  );
+  session.handler = () => draftAndComplete();
+}
+
+async function flowInterim() {
+  session.intent = 'interim';
+  session.docKind = 'interim';
+  session.template = 'Interim Grocery Shift Lead Amendment · Wolt Services Oy';
+  session.brand = 'wolt-services';
+  session.status = 'collecting';
+  session.sources.templates.push(session.template);
+  session.sources.regulation.push('Wolt Services Oy CBA · interim role premium');
+  setDocStatus('collecting');
+  renderPaper();
+
+  await addAssistant(
+    `Interim assignment. Using <strong>Interim Grocery Shift Lead Amendment</strong>. Who, when, and for how long?`,
+    {
+      insights: [{ kind: 'regulation', icon: '⚖️', label: 'CBA premium', text: 'Interim role assignments include a temporary premium per the Wolt Services Oy CBA. Calculated from current base.' }],
+    }
+  );
+  session.handler = handleInterimDetails;
+}
+
+async function handleInterimDetails(text) {
+  const name = extractName(text) || titleCase(text.split(',')[0].trim());
+  const dates = text.match(/(20\d\d-\d{2}-\d{2})/g) || [];
+  session.employee.name = name;
+  if (dates[0]) session.contract.startDate = dates[0];
+  if (dates[1]) session.contract.endDate = dates[1];
+  session.employee.role = 'Interim Grocery Shift Lead';
+  renderPaper();
+  renderBTS();
+
+  await addAssistant(
+    `Got it — <strong>${name}</strong>, ${session.contract.startDate || '[start]'} to ${session.contract.endDate || '[end]'}. Drafting.`
+  );
+  draftAndComplete();
+}
+
+async function flowPromotion() {
+  session.intent = 'promotion';
+  session.docKind = 'promotion';
+  session.template = 'Promotion Letter · Wolt Oy';
+  session.brand = 'wolt-oy';
+  session.status = 'collecting';
+  session.sources.templates.push(session.template);
+  setDocStatus('collecting');
+  renderPaper();
+
+  await addAssistant(`Promotion. Who's being promoted, to what role, and effective when? New compensation if it's changing.`);
+  session.handler = handlePromotion;
+}
+
+async function handlePromotion(text) {
+  const name = extractName(text) || titleCase(text.split(',')[0].trim());
+  const dMatch = text.match(/(20\d\d-\d{2}-\d{2})/);
+  const sMatch = text.match(/€\s*[\d,.]+/);
+  session.employee.name = name;
+  if (dMatch) session.contract.startDate = dMatch[1];
+  if (sMatch) session.contract.salary = sMatch[0];
+  renderPaper();
+  await addAssistant(`Drafting promotion letter for ${name}.`);
+  draftAndComplete();
+}
+
+async function flowTermination() {
+  session.intent = 'termination';
+  session.status = 'collecting';
+  setDocStatus('collecting');
+  await addAssistant(
+    `Termination — sensitive territory. I need to understand the situation before drafting anything.`,
+    {
+      insights: [{ kind: 'warning', icon: '⚡', label: 'Likely escalation', text: 'Performance terminations past probation in Finland require Counsel review for process compliance (warnings, hearing, statutory notice).' }],
+      replies: [
+        { label: 'Performance — past probation', onClick: () => quickPick('Performance, past probation') },
+        { label: 'Mutual agreement', onClick: () => quickPick('Mutual agreement, both parties want to part ways') },
+        { label: 'Probation period', onClick: () => quickPick('Still in probation period') },
+      ],
+    }
+  );
+  session.handler = handleTermType;
+}
+
+async function handleTermType(text) {
+  const t = text.toLowerCase();
+  if (t.includes('performance') && !t.includes('probation')) {
+    session.flags.push('performance_termination');
+    session.status = 'escalated';
+    await addAssistant(
+      `Escalating. Performance termination after probation requires documented warnings, hearing process, and statutory notice. The conversation, employee record, and prior warnings are forwarded to Counsel.`,
+      { insights: [{ kind: 'stop', icon: '⏸', label: 'Escalated', text: 'Counsel ticket created. ETA 1 business day. Counsel handles drafting from here.' }] }
+    );
+    document.getElementById('paper').classList.add('empty');
+    document.getElementById('paper').innerHTML = `<div class="empty-icon">⏸</div><strong>Escalated to Counsel.</strong><br>Performance terminations past probation require legal review before drafting. Context forwarded.`;
+    setDocStatus('ready');
+  } else if (t.includes('mutual')) {
+    session.docKind = 'mutual_termination';
+    session.template = 'Mutual Termination Agreement · Wolt Oy';
+    session.brand = 'wolt-oy';
+    session.sources.templates.push(session.template);
+    session.sources.regulation.push('Finnish Employment Contracts Act §6 (notice periods)');
+    setDocStatus('collecting');
+    renderPaper();
+    await addAssistant(`Mutual termination — cleaner. Who, effective when, and is there a separation payment?`);
+    session.handler = handleTermDetails;
+  } else if (t.includes('probation')) {
+    session.docKind = 'probation_termination';
+    session.template = 'Probation Period Termination · Wolt Oy';
+    session.brand = 'wolt-oy';
+    session.sources.templates.push(session.template);
+    session.sources.regulation.push('Finnish Employment Contracts Act §1:4 (probation termination)');
+    setDocStatus('collecting');
+    renderPaper();
+    await addAssistant(`Probation termination — straightforward. Who and effective date?`);
+    session.handler = handleTermDetails;
+  }
+}
+
+async function handleTermDetails(text) {
+  const name = extractName(text) || titleCase(text.split(',')[0].trim());
+  const dMatch = text.match(/(20\d\d-\d{2}-\d{2})/);
+  const sMatch = text.match(/€\s*[\d,.]+/);
+  session.employee.name = name;
+  if (dMatch) session.contract.endDate = dMatch[1];
+  if (sMatch) session.contract.salary = sMatch[0];
+  renderPaper();
+  await addAssistant(`Drafting for ${name}.`);
+  draftAndComplete();
+}
+
+async function flowUnknown() {
+  await addAssistant(
+    `I'm not sure what you need yet. Tell me what kind of document — examples below.`,
+    {
+      replies: [
+        { label: 'Reduce hours', onClick: () => quickPick('I need to reduce someone\'s hours') },
+        { label: 'New hire', onClick: () => quickPick('New hire — Senior Engineer Product, Wolt Oy') },
+        { label: 'Convert to permanent', onClick: () => quickPick('Aino is going from fixed-term to permanent') },
+        { label: 'Interim role', onClick: () => quickPick('Assigning an interim Grocery Shift Lead') },
+        { label: 'Termination', onClick: () => quickPick('Termination — performance') },
+        { label: 'Promotion', onClick: () => quickPick('Promotion to Senior Engineer'), muted: true },
+      ],
+    }
+  );
+}
+
+// =============================================================
+// DRAFT & COMPLETE
+// =============================================================
+async function draftAndComplete() {
+  setDocStatus('drafting');
+  renderPaper();
+  await addAssistant(`Drafting now…`);
+  setTimeout(() => {
+    setDocStatus('ready');
+    renderPaper(true);
+    addAssistant(
+      `Done. The draft is on the right. Want me to revise anything, or send it for signature?`,
+      {
+        replies: [
+          { label: 'Send to DocuSign', onClick: () => finalize() },
+          { label: 'Change something', onClick: () => quickPick('Change the effective date to 2026-07-01'), muted: true },
+        ],
+      }
+    );
+  }, 700);
+  renderBTS();
+}
+
+async function finalize() {
+  await addAssistant(
+    `Sent to DocuSign. The full conversation, sources consulted, and citations are saved to the audit record. <strong>Conversation ID: LUM-2026-00482</strong>.`,
+    { insights: [{ kind: 'good', icon: '✓', label: 'Logged', text: 'Audit record contains every regulatory citation, every precedent retrieved, and every choice made during this conversation.' }] }
+  );
+}
+
+// =============================================================
+// PAPER RENDERING
+// =============================================================
+function setDocStatus(state) {
+  const pill = document.getElementById('doc-status');
+  pill.className = 'pill ' + state;
+  pill.textContent = ({
+    collecting: 'Collecting',
+    drafting: 'Drafting',
+    ready: 'Ready',
+  })[state] || 'Empty';
+}
+
+function field(v, fallback = '____________') {
+  if (v) return `<span class="field">${escapeHTML(v)}</span>`;
+  return `<span class="field pending">${fallback}</span>`;
+}
+
+function citation(num) {
+  return `<sup class="cite" title="See footnote ${num}">[${num}]</sup>`;
+}
+
+function renderPaper(animate = false) {
+  const paper = document.getElementById('paper');
+  paper.classList.remove('empty');
+  // Reflect current brand in the chip UI
+  document.querySelectorAll('.brand-chip').forEach(c => {
+    c.classList.toggle('active', c.dataset.brand === session.brand ||
+      (session.brand === 'wolt-services' && c.dataset.brand === 'wolt-oy'));
+  });
+  if (!session.docKind) {
+    paper.classList.add('empty');
+    paper.innerHTML = `<div class="empty-icon">📝</div>The document will appear here as the conversation progresses.`;
+    return;
+  }
+
+  const brand = BRANDS[session.brand] || BRANDS['wolt-oy'];
+  const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  const v = session;
+  let body = '';
+  let title = '';
+  let signatures = '';
+  let footnotes = [];
+
+  if (v.docKind === 'amendment_hours') {
+    title = 'Amendment to Employment Agreement';
+    body = `
+      <p>This Amendment to Employment Agreement (the "Amendment") is entered into between <strong>${brand.label}</strong> (the "Company") and ${field(v.employee.name, '[Employee name]')} (the "Employee").</p>
+      <div class="doc-section-h">Change of working hours</div>
+      <p>Effective ${field(v.contract.startDate)}, the Employee's weekly working hours shall be ${field(v.contract.hours)}, reduced from the prior contracted hours of ${field(v.contract.prevHours, '[prior hours]')}${v.flags.includes('employee_initiated') ? ', at the Employee\'s own request.' : '.'}${citation(1)}</p>
+      <p>The Employee's monthly salary shall be adjusted pro-rata to ${field(v.contract.salary)}, from the prior salary of ${field(v.contract.prevSalary, '[prior salary]')}.</p>
+      ${v.flags.includes('pension_threshold') ? `<p style="background:var(--stop-soft); padding:8px 12px; border-radius:4px; font-size:12px; color:#7f1d1d; font-family:-apple-system,Inter,sans-serif;"><strong>Note:</strong> The reduced working hours fall below the TyEL pension contribution threshold. Statutory pension accrual under the Employees Pensions Act will not apply during this period.${citation(2)}</p>` : ''}
+      <div class="doc-section-h">Other provisions</div>
+      <p>This Amendment shall be governed by the laws of Finland.${v.flags.includes('pension_threshold') ? citation(3) : ''} Any dispute arising out of or relating to this Amendment shall be settled by the District Court of Helsinki as the first instance.</p>
+    `;
+    footnotes = [
+      'Finnish Employment Contracts Act §10 — material change of working conditions requires written notification.',
+      ...(v.flags.includes('pension_threshold') ? ['Employees Pensions Act (TyEL) §4 — pension accrual threshold of 25 hours per week.'] : []),
+      ...(v.flags.includes('pension_threshold') ? ['Finnish Employment Contracts Act — governing law and forum.'] : []),
+    ];
+    signatures = `
+      <div class="signatures">
+        <div class="sig-block"><div>${brand.label}</div><div class="sig-name">Authorized Officer</div></div>
+        <div class="sig-block"><div>Employee</div><div class="sig-name">${v.employee.name || '[Employee]'}</div></div>
+      </div>`;
+
+  } else if (v.docKind === 'employment_agreement') {
+    title = 'Employment Agreement';
+    body = `
+      <p>This Employment Agreement is entered into between <strong>${brand.label}</strong> (the "Employer") and ${field(v.employee.name, '[Employee name]')} (the "Employee").</p>
+      <div class="doc-section-h">1. Position and duties</div>
+      <p>The Employee is engaged as ${field(v.employee.role)}, reporting to the team specified in the appointment letter. Standard duties and responsibilities apply per the role description.</p>
+      <div class="doc-section-h">2. Term</div>
+      <p>This is a ${field(v.contract.type === 'permanent' ? 'permanent' : (v.contract.type === 'fixed_term' ? 'fixed-term' : '[type]'))} engagement, commencing ${field(v.contract.startDate)}.</p>
+      <div class="doc-section-h">3. Compensation</div>
+      <p>The Employee's gross monthly salary shall be ${field(v.contract.salary)}, payable per the standard payroll cycle.${citation(1)}${v.flags.some(f => f.startsWith('sign_on_bonus')) ? '<br><span class="new-content">A separate sign-on addendum will be issued covering the agreed bonus.</span>' : ''}</p>
+      <div class="doc-section-h">4. Working hours</div>
+      <p>Standard working hours shall follow the applicable Finnish Employment Contracts Act${citation(2)}${v.employee.role && v.employee.role.includes('Grocery') ? ` and the Wolt Services Oy collective bargaining agreement, including shift premium and weekend bonus where applicable.${citation(3)}` : '.'}</p>
+      ${v.contract.type === 'permanent' ? `<div class="doc-section-h">5. Probation</div><p>A probation period of six months applies, in accordance with the Finnish Employment Contracts Act §1:4.${citation(4)}</p>` : ''}
+      <div class="doc-section-h">${v.contract.type === 'permanent' ? '6' : '5'}. Other provisions</div>
+      <p>This Agreement shall be governed by the laws of Finland. Any dispute shall be settled by the District Court of Helsinki as the first instance.</p>
+    `;
+    footnotes = [
+      'Finnish Employment Contracts Act §2 — terms of employment.',
+      'Finnish Employment Contracts Act §3 — working hours, statutory framework.',
+      ...(v.employee.role && v.employee.role.includes('Grocery') ? ['Wolt Services Oy CBA §6 working hours; §11 shift premium and weekend bonus.'] : []),
+      ...(v.contract.type === 'permanent' ? ['Finnish Employment Contracts Act §1:4 — probation period (max 6 months).'] : []),
+    ];
+    signatures = `
+      <div class="signatures">
+        <div class="sig-block"><div>${brand.label}</div><div class="sig-name">Authorized Officer</div></div>
+        <div class="sig-block"><div>Employee</div><div class="sig-name">${v.employee.name || '[Employee]'}</div></div>
+      </div>`;
+
+  } else if (v.docKind === 'conversion') {
+    title = 'Employment Agreement (Fixed-term to Permanent)';
+    body = `
+      <p>This Agreement is entered into between <strong>${brand.label}</strong> and ${field(v.employee.name, '[Employee name]')}.</p>
+      <div class="doc-section-h">Recitals</div>
+      <p>The Employee has been engaged under a fixed-term contract since <span class="field">${v.employee.tenureSince || '2025-09-01'}</span> in the role of ${field(v.employee.role, 'WM Grocery Shift Lead')}. The Parties wish to convert this to a permanent engagement.</p>
+      <div class="doc-section-h">1. Conversion</div>
+      <p>Effective ${field(v.contract.startDate)}, the Employee's engagement is converted to a permanent contract. Accrued service and benefits continue uninterrupted.</p>
+      <div class="doc-section-h">2. No probation period</div>
+      <p><span class="new-content">No new probation period applies. The Employee has performed the same role under the prior fixed-term arrangement.${citation(1)}</span></p>
+      <div class="doc-section-h">3. Compensation</div>
+      <p>Gross monthly salary remains ${field(v.contract.salary, '€2,650 / month')}.${citation(2)}</p>
+      <div class="doc-section-h">4. Carry-forward provisions</div>
+      <p>${v.flags.includes('drop_shift_addendum') ? 'The existing shift work addendum lapses on conversion.' : '<span class="new-content">The existing shift work addendum carries forward without modification.</span>'}</p>
+      <div class="doc-section-h">5. Other provisions</div>
+      <p>This Agreement is governed by Finnish law and the applicable collective bargaining agreement.${citation(3)}</p>
+    `;
+    footnotes = [
+      'Finnish Employment Contracts Act §1:4 — probation cannot be re-applied to the same role.',
+      'Finnish Employment Contracts Act §10 — material change of working conditions.',
+      'Wolt Services Oy CBA — applicable to WM Grocery roles.',
+    ];
+    signatures = `
+      <div class="signatures">
+        <div class="sig-block"><div>${brand.label}</div><div class="sig-name">Authorized Officer</div></div>
+        <div class="sig-block"><div>Employee</div><div class="sig-name">${v.employee.name || '[Employee]'}</div></div>
+      </div>`;
+
+  } else if (v.docKind === 'interim') {
+    title = 'Interim Role Amendment';
+    body = `
+      <p>This Amendment is entered into between <strong>${brand.label}</strong> and ${field(v.employee.name, '[Employee name]')}.</p>
+      <div class="doc-section-h">1. Interim assignment</div>
+      <p>The Employee is assigned to the interim role of ${field(v.employee.role, 'Grocery Shift Lead')} from ${field(v.contract.startDate)} until ${field(v.contract.endDate)}.</p>
+      <div class="doc-section-h">2. Compensation premium</div>
+      <p>For the duration of this assignment, the Employee receives an interim role premium per the applicable collective bargaining agreement.${citation(1)} Standard base salary continues unchanged; the premium is paid as a separate line item.</p>
+      <div class="doc-section-h">3. Reversion</div>
+      <p>Upon expiration of this Amendment, the Employee reverts to the prior role and compensation, unless a separate agreement extends or converts the assignment.</p>
+    `;
+    footnotes = [
+      'Wolt Services Oy CBA — interim role premium provisions.',
+    ];
+    signatures = `
+      <div class="signatures">
+        <div class="sig-block"><div>${brand.label}</div><div class="sig-name">Authorized Officer</div></div>
+        <div class="sig-block"><div>Employee</div><div class="sig-name">${v.employee.name || '[Employee]'}</div></div>
+      </div>`;
+
+  } else if (v.docKind === 'mutual_termination') {
+    title = 'Mutual Termination Agreement';
+    body = `
+      <p>This Agreement confirms the mutually agreed conclusion of employment between <strong>${brand.label}</strong> and ${field(v.employee.name, '[Employee name]')}, effective ${field(v.contract.endDate)}.${citation(1)}</p>
+      <div class="doc-section-h">1. Final terms</div>
+      <p>The Employee's final paycheck, accrued vacation, and benefits continuation will be processed per Finnish Employment Contracts Act and applicable collective agreements.${v.contract.salary ? ` A separation payment of <span class="field">${v.contract.salary}</span> is included in this agreement.` : ''}</p>
+      <div class="doc-section-h">2. Mutual release</div>
+      <p>Both parties acknowledge that this conclusion is by mutual agreement, and waive any further claims relating to the employment relationship, except as specifically reserved herein.</p>
+    `;
+    footnotes = [
+      'Finnish Employment Contracts Act §6 — notice periods and termination procedures.',
+    ];
+    signatures = `
+      <div class="signatures">
+        <div class="sig-block"><div>${brand.label}</div><div class="sig-name">Authorized Officer</div></div>
+        <div class="sig-block"><div>Employee</div><div class="sig-name">${v.employee.name || '[Employee]'}</div></div>
+      </div>`;
+
+  } else if (v.docKind === 'probation_termination') {
+    title = 'Probation Period Termination';
+    body = `
+      <p>This letter confirms the conclusion of employment between <strong>${brand.label}</strong> and ${field(v.employee.name, '[Employee name]')}, effective ${field(v.contract.endDate)}, in accordance with the probation provisions of the Finnish Employment Contracts Act.${citation(1)}</p>
+      <div class="doc-section-h">Notice and reason</div>
+      <p>The Parties acknowledge that the employment is terminated during the probation period. No statutory notice is required under the Act, and the reason for termination has been communicated separately.</p>
+      <div class="doc-section-h">Final terms</div>
+      <p>Final pay and accrued benefits will be processed per standard payroll cycle.</p>
+    `;
+    footnotes = [
+      'Finnish Employment Contracts Act §1:4 — probation period termination provisions.',
+    ];
+    signatures = `
+      <div class="signatures">
+        <div class="sig-block"><div>${brand.label}</div><div class="sig-name">Authorized Officer</div></div>
+        <div class="sig-block"><div>Employee</div><div class="sig-name">${v.employee.name || '[Employee]'}</div></div>
+      </div>`;
+
+  } else if (v.docKind === 'promotion') {
+    title = 'Promotion Letter';
+    body = `
+      <p>Dear ${field(v.employee.name, '[Employee name]')},</p>
+      <p>We are pleased to confirm your promotion at <strong>${brand.label}</strong>, effective ${field(v.contract.startDate)}.</p>
+      <div class="doc-section-h">New role</div>
+      <p>Your new role is ${field(v.employee.role, '[role]')}. The duties and responsibilities of the role are described in the role profile shared separately.</p>
+      <div class="doc-section-h">Compensation</div>
+      <p>Your new gross monthly salary will be ${field(v.contract.salary, '[salary]')}, effective the same date.${citation(1)} All other terms of your employment continue in full effect.</p>
+      <p>Please sign below to confirm acceptance.</p>
+    `;
+    footnotes = ['Finnish Employment Contracts Act §10 — material change of terms.'];
+    signatures = `
+      <div class="signatures">
+        <div class="sig-block"><div>${brand.label}</div><div class="sig-name">Authorized Officer</div></div>
+        <div class="sig-block"><div>Employee</div><div class="sig-name">${v.employee.name || '[Employee]'}</div></div>
+      </div>`;
+  }
+
+  paper.innerHTML = `
+    <div class="letterhead">
+      <div class="brand-mark"><svg style="height:32px"><use href="#${brand.logo}"/></svg></div>
+      <div class="legal-entity">${brand.label}<br>${brand.addr}</div>
+    </div>
+    <div class="doc-body">
+      <div class="doc-meta-row">
+        <div>${today}</div>
+        <div>Lumina · LUM-2026-${String(Math.floor(Math.random() * 90000) + 10000)}</div>
+      </div>
+      <div class="doc-title">${title}</div>
+      ${body}
+    </div>
+    ${signatures}
+    ${footnotes.length ? `<div class="footnotes">
+      <div class="footnotes-title">Citations</div>
+      ${footnotes.map((f, i) => `<div class="footnote"><span class="num">[${i+1}]</span>${f}</div>`).join('')}
+    </div>` : ''}
+  `;
+
+  // Animate footnotes in
+  const fnEls = paper.querySelectorAll('.footnote');
+  fnEls.forEach((el, i) => setTimeout(() => el.classList.add('visible'), 80 + i * 100));
+}
+
+// =============================================================
+// BEHIND THE SCENES
+// =============================================================
+function toggleBTS() {
+  const bts = document.getElementById('bts');
+  const toggle = document.getElementById('bts-toggle');
+  bts.classList.toggle('open');
+  toggle.classList.toggle('open');
+}
+function renderBTS() {
+  const el = document.getElementById('bts-content');
+  if (!session.intent && !session.template) {
+    el.innerHTML = `<div style="color: var(--muted); font-size: 12px; text-align:center; padding: 8px 0;">Engine activity will appear here as the conversation progresses.</div>`;
+    return;
+  }
+  const rows = [];
+  rows.push({key: 'Intent', val: session.intent || '<span class="muted">detecting…</span>'});
+  if (session.sources.templates.length) {
+    rows.push({key: 'Templates', val: session.sources.templates.map(t => `<span class="bts-tag template">tpl</span>${t}`).join('<br>')});
+  }
+  if (session.sources.precedent.length) {
+    rows.push({key: 'Precedent', val: session.sources.precedent.map(t => `<span class="bts-tag precedent">corpus</span>${t}`).join('<br>')});
+  }
+  if (session.sources.regulation.length) {
+    rows.push({key: 'Regulation', val: session.sources.regulation.map(t => `<span class="bts-tag regulation">reg</span>${t}`).join('<br>')});
+  }
+  if (session.flags.length) {
+    rows.push({key: 'Flags', val: session.flags.join(', ')});
+  }
+  rows.push({key: 'Status', val: session.status});
+
+  el.innerHTML = rows.map(r => `
+    <div class="bts-row">
+      <div class="bts-key">${r.key}</div>
+      <div class="bts-val">${r.val}</div>
+    </div>
+  `).join('');
+}
+
+// =============================================================
+// HISTORY
+// =============================================================
+const HISTORY = [
+  { icon: '⏱', title: 'Aino Korhonen — hours reduction (32h → 28h)', detail: 'Wolt Oy · Time Reduction Amendment · TyEL pension check passed', status: 'Sent', time: '2 hours ago' },
+  { icon: '🔄', title: 'Olli Mäkelä — fixed-term to permanent', detail: 'Wolt Services Oy · WM Grocery Shift Lead · Probation auto-omitted; shift addendum carried forward', status: 'Sent', time: '4 hours ago' },
+  { icon: '👤', title: 'Sara Hämäläinen — new hire (Senior Backend Engineer)', detail: 'Wolt Oy · Permanent · 6-month probation, standard provisions', status: 'Awaiting signature', time: 'Yesterday' },
+  { icon: '⏸', title: 'Jukka Ahonen — performance termination (escalated)', detail: 'Wolt Oy · Routed to Counsel · Process compliance review required', status: 'With Counsel', time: 'Yesterday' },
+  { icon: '⏱', title: 'Maria Lindberg — interim Grocery Shift Lead', detail: 'Wolt Services Oy · 2026-05-15 to 2026-08-31 · CBA premium applied', status: 'Sent', time: '2 days ago' },
+  { icon: '↗', title: 'Tom Eriksson — promotion (Engineer II → Senior)', detail: 'Wolt Oy · €5,200/month · Effective 2026-06-01', status: 'Sent', time: '3 days ago' },
+  { icon: '🔄', title: 'Elina Salo — mutual termination', detail: 'Wolt Oy · Effective 2026-04-30 · Separation payment included', status: 'Sent', time: '5 days ago' },
+];
+function renderHistory() {
+  const list = document.getElementById('history-list');
+  list.innerHTML = HISTORY.map(h => `
+    <div class="history-row">
+      <div class="hr-icon">${h.icon}</div>
+      <div class="hr-meta">
+        <div class="hr-title">${h.title}</div>
+        <div class="hr-detail">${h.detail}</div>
+      </div>
+      <div class="hr-status">${h.status}</div>
+      <div class="hr-time">${h.time}</div>
+    </div>
+  `).join('');
+}
+
+// =============================================================
+// HELPERS
+// =============================================================
+function extractName(text) {
+  const m = text.match(/([A-ZÄÖÅ][a-zäöå]+(?:\s+[A-ZÄÖÅ][a-zäöå]+)+)/);
+  return m ? m[1] : null;
+}
+function titleCase(s) {
+  return s.split(' ').map(w => w[0] ? w[0].toUpperCase() + w.slice(1).toLowerCase() : '').join(' ').trim();
+}
+function escapeHTML(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function resetSession() {
+  document.getElementById('chat-stream').innerHTML = '';
+  session = freshSession();
+  document.getElementById('paper').classList.add('empty');
+  document.getElementById('paper').innerHTML = `<div class="empty-icon">📝</div>The document will appear here as the conversation progresses.`;
+  setDocStatus('empty');
+  document.getElementById('doc-status').className = 'pill';
+  document.getElementById('doc-status').textContent = 'Empty';
+  document.querySelectorAll('.brand-chip').forEach(c => {
+    c.classList.toggle('active', c.dataset.brand === session.brand);
+  });
+  renderBTS();
+  greet();
+}
+
+// =============================================================
+// INIT
+// =============================================================
+async function greet() {
+  await addAssistant(
+    `Hi. What document do you need?`,
+    {
+      replies: [
+        { label: 'Reduce hours', onClick: () => quickPick('I need to reduce someone\'s hours') },
+        { label: 'New hire', onClick: () => quickPick('New hire — Senior Engineer Product, Wolt Oy') },
+        { label: 'Convert to permanent', onClick: () => quickPick('Aino is going from fixed-term to permanent') },
+        { label: 'Interim role', onClick: () => quickPick('Assigning an interim Grocery Shift Lead'), muted: true },
+        { label: 'Termination', onClick: () => quickPick('Termination — performance'), muted: true },
+      ],
+    }
+  );
+}
+
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('panel-' + t.dataset.tab).classList.add('active');
+  });
+});
+// Mark initial brand chip
+document.querySelectorAll('.brand-chip').forEach(c => {
+  c.classList.toggle('active', c.dataset.brand === session.brand);
+});
+renderHistory();
+greet();
+</script>
+
+</body>
+</html>

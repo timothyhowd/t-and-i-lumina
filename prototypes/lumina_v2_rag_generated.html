@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lumina v2 — RAG-Generated Documents</title>
+<style>
+  :root {
+    --navy: #0b2545; --navy-2: #13315c;
+    --slate: #475569; --slate-2: #64748b;
+    --bg: #f8fafc; --card: #ffffff; --border: #e2e8f0;
+    --green: #16a34a; --green-bg: #f0fdf4;
+    --amber: #d97706; --amber-bg: #fffbeb;
+    --red: #dc2626; --red-bg: #fef2f2;
+    --accent: #2563eb; --accent-bg: #eff6ff;
+    --purple: #7c3aed; --purple-bg: #f5f3ff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { font-family: -apple-system, "Inter", sans-serif; background: var(--bg); color: #1e293b; line-height: 1.5; font-size: 14px; }
+  header.top { background: var(--navy); color: white; padding: 18px 28px; border-bottom: 4px solid var(--purple); }
+  header.top h1 { font-size: 18px; font-weight: 600; }
+  header.top .sub { font-size: 12px; opacity: 0.75; margin-top: 2px; }
+  header.top .sub .pill { background: var(--purple); padding: 1px 8px; border-radius: 4px; margin-left: 8px; font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; font-weight: 700; }
+  .tabs { display: flex; background: white; border-bottom: 1px solid var(--border); padding: 0 24px; position: sticky; top: 0; z-index: 10; overflow-x: auto; }
+  .tab { padding: 14px 18px; cursor: pointer; border-bottom: 2px solid transparent; font-size: 13px; font-weight: 500; color: var(--slate); white-space: nowrap; }
+  .tab.active { color: var(--navy); border-bottom-color: var(--purple); }
+  .tab:hover:not(.active) { color: var(--navy-2); background: #f8fafc; }
+  main { padding: 24px 28px; max-width: 1400px; margin: 0 auto; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  h2 { font-size: 18px; margin-bottom: 4px; color: var(--navy); }
+  h3 { font-size: 15px; margin: 18px 0 8px; color: var(--navy-2); }
+  h4 { font-size: 13px; margin: 12px 0 6px; color: var(--slate); text-transform: uppercase; letter-spacing: 0.05em; }
+  p { margin-bottom: 10px; }
+  .lede { color: var(--slate); margin-bottom: 16px; font-size: 13px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 18px; margin-bottom: 16px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+  label { display: block; font-size: 12px; color: var(--slate); margin-bottom: 4px; font-weight: 500; }
+  input, select, textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: 13px; font-family: inherit; background: white;
+  }
+  textarea { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--purple); outline-offset: -1px; }
+  button { background: var(--purple); color: white; padding: 10px 16px; border: none; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; }
+  button:hover { filter: brightness(1.1); }
+  button.secondary { background: white; color: var(--navy); border: 1px solid var(--border); }
+  button.secondary:hover { background: var(--bg); }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; background: var(--purple-bg); color: var(--purple); }
+  .badge.green { background: var(--green-bg); color: var(--green); }
+  .badge.amber { background: var(--amber-bg); color: var(--amber); }
+  .badge.red { background: var(--red-bg); color: var(--red); }
+  .badge.slate { background: #f1f5f9; color: var(--slate); }
+
+  /* AI thinking visualization */
+  .ai-stream {
+    background: linear-gradient(180deg, #faf7ff 0%, #ffffff 100%);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    min-height: 600px;
+    position: relative;
+  }
+  .ai-stream-header { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+  .ai-pulse { width: 12px; height: 12px; border-radius: 50%; background: var(--purple); animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 0.4; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1.15); } }
+  .ai-stream-header.idle .ai-pulse { animation: none; opacity: 0.35; }
+  .ai-stream-header.done .ai-pulse { background: var(--green); animation: none; opacity: 1; }
+  .ai-step {
+    padding: 12px 14px; margin-bottom: 8px; background: white; border: 1px solid var(--border);
+    border-radius: 8px; font-size: 13px; opacity: 0; transform: translateY(4px);
+    transition: opacity 0.4s, transform 0.4s; display: flex; gap: 10px; align-items: flex-start;
+  }
+  .ai-step.visible { opacity: 1; transform: translateY(0); }
+  .ai-step .step-icon { color: var(--purple); flex-shrink: 0; font-weight: 700; font-size: 11px; padding: 2px 0; min-width: 22px; }
+  .ai-step.thinking .step-icon::after { content: "..."; animation: dots 1.2s steps(4) infinite; display: inline-block; }
+  .ai-step.done .step-icon { color: var(--green); }
+  .ai-step.done .step-icon::before { content: "✓"; }
+  @keyframes dots { 0% { content: "."; } 33% { content: ".."; } 66% { content: "..."; } }
+  .ai-step .step-body { flex: 1; }
+  .ai-step .step-detail { font-size: 11px; color: var(--slate); margin-top: 4px; line-height: 1.5; }
+
+  .corpus-snippet {
+    background: var(--purple-bg); border-left: 3px solid var(--purple); padding: 8px 12px;
+    margin: 6px 0; border-radius: 0 4px 4px 0; font-size: 12px; font-family: Georgia, serif;
+    opacity: 0; max-height: 0; overflow: hidden; transition: opacity 0.4s, max-height 0.4s, padding 0.4s, margin 0.4s;
+  }
+  .corpus-snippet.visible { opacity: 1; max-height: 200px; padding: 8px 12px; margin: 6px 0; }
+  .corpus-snippet .src { font-size: 10px; color: var(--purple); font-family: -apple-system, sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+
+  /* Generated document streaming */
+  .gen-doc {
+    background: white; border: 1px solid var(--border); border-radius: 6px; padding: 28px 36px;
+    font-family: Georgia, "Times New Roman", serif; font-size: 13.5px; line-height: 1.85;
+    margin-top: 14px; min-height: 220px; position: relative;
+  }
+  .gen-doc-line {
+    opacity: 0; transform: translateY(4px); transition: opacity 0.3s, transform 0.3s;
+    margin-bottom: 6px; min-height: 1.2em;
+  }
+  .gen-doc-line.visible { opacity: 1; transform: translateY(0); }
+  .gen-doc-cursor {
+    display: inline-block; width: 2px; height: 14px; background: var(--purple);
+    animation: blink 1s steps(2) infinite; vertical-align: middle; margin-left: 1px;
+  }
+  @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0; } }
+
+  .corpus-card {
+    background: white; border: 1px solid var(--border); border-radius: 8px; padding: 14px;
+    margin-bottom: 10px;
+  }
+  .corpus-card-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
+  .corpus-card .meta { font-size: 11px; color: var(--slate); margin: 4px 0; }
+  .corpus-card .preview {
+    font-family: Georgia, serif; font-size: 12px; color: var(--slate); font-style: italic;
+    padding: 8px 10px; background: var(--bg); border-radius: 4px; margin-top: 8px;
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  th { background: #f8fafc; font-weight: 600; color: var(--slate); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+  .stat { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 16px; text-align: center; }
+  .stat .num { font-size: 28px; font-weight: 700; color: var(--purple); }
+  .stat .label { font-size: 11px; color: var(--slate); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
+
+  .review-item {
+    background: white; border: 1px solid var(--border); border-radius: 8px; padding: 14px;
+    margin-bottom: 10px; display: flex; gap: 14px; align-items: flex-start;
+  }
+  .review-item .review-icon { font-size: 22px; }
+  .review-item .review-meta { flex: 1; }
+  .review-item .review-actions { display: flex; gap: 6px; }
+
+  .callout { padding: 12px 14px; border-radius: 0 6px 6px 0; margin: 14px 0; font-size: 13px; }
+  .callout.amber { background: var(--amber-bg); border-left: 3px solid var(--amber); }
+  .callout.green { background: var(--green-bg); border-left: 3px solid var(--green); }
+  .callout.purple { background: var(--purple-bg); border-left: 3px solid var(--purple); }
+
+  .memo { max-width: 820px; line-height: 1.65; }
+  .memo h2 { font-size: 22px; margin-bottom: 8px; }
+  .memo h3 { font-size: 16px; margin-top: 24px; }
+  .memo h4 { font-size: 13px; margin-top: 18px; color: var(--navy-2); text-transform: none; letter-spacing: 0; }
+  .memo p { margin-bottom: 12px; font-size: 14px; }
+  .memo ul, .memo ol { margin: 8px 0 14px 24px; }
+  .memo li { margin-bottom: 6px; font-size: 14px; }
+  .memo strong { color: var(--navy); }
+  hr.sep { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1>Lumina — RAG-Generated Documents <span class="badge" style="background:rgba(255,255,255,0.15); color:white">v2</span></h1>
+  <div class="sub">Templates are training data, not artifacts. Documents are synthesized at request time from a versioned corpus.<span class="pill">Generative paradigm</span></div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <div class="tab active" data-tab="generate">Generate Document</div>
+  <div class="tab" data-tab="corpus">Corpus Library</div>
+  <div class="tab" data-tab="update">Drop in Legal Update</div>
+  <div class="tab" data-tab="review">Human Review Queue</div>
+  <div class="tab" data-tab="notes">Decision Notes</div>
+</nav>
+
+<main>
+
+<!-- ============= GENERATE ============= -->
+<section class="panel active" id="panel-generate">
+  <h2>Generate Document</h2>
+  <p class="lede">No template lookup. The agent queries the corpus, retrieves relevant precedent + current legal language, and synthesizes a draft tailored to this specific employee, country, and event.</p>
+
+  <div class="card">
+    <h3 style="margin-top:0">1. Request Document</h3>
+    <div class="grid-2" style="gap:10px">
+      <div><label>Document Type</label>
+        <select id="trigger-select">
+          <option value="employee.hired">Employee hired</option>
+          <option value="employee.compensation_changed">Compensation changed</option>
+          <option value="employee.role_changed">Promotion / role change</option>
+          <option value="employee.terminated">Termination</option>
+          <option value="annual.compensation_cycle">Annual comp cycle</option>
+          <option value="employee.relocation">International relocation</option>
+        </select>
+      </div>
+      <div><label>Country</label>
+        <select id="emp-country">
+          <option value="ES">Spain</option>
+          <option value="FI">Finland</option>
+          <option value="US">United States</option>
+          <option value="DE">Germany</option>
+          <option value="UK">United Kingdom</option>
+        </select>
+      </div>
+      <div><label>Brand</label>
+        <select id="emp-brand">
+          <option value="wolt">Wolt</option>
+          <option value="doordash">DoorDash</option>
+          <option value="deliveroo">Deliveroo</option>
+        </select>
+      </div>
+      <div><label>Worker Type</label>
+        <select id="emp-worker-type">
+          <option value="employee">Employee</option>
+          <option value="contingent">Contingent</option>
+        </select>
+      </div>
+      <div><label>Employee Name</label><input id="emp-name" value="María López"></div>
+      <div><label>Role</label><input id="emp-role" value="Senior Engineer"></div>
+      <div><label>Start / Effective Date</label><input id="emp-start" value="2026-06-01"></div>
+      <div><label>Compensation</label><input id="emp-comp" value="€85,000"></div>
+    </div>
+    <div style="margin-top:14px; display:flex; gap:8px; justify-content:center">
+      <button onclick="generate()">Generate with AI</button>
+      <button class="secondary" onclick="reset()">Reset</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">2. Agent reasoning</h3>
+    <div class="ai-stream">
+      <div class="ai-stream-header idle" id="stream-header">
+        <div class="ai-pulse"></div>
+        <div><strong id="stream-status">Idle.</strong> <span style="font-size:12px; color:var(--slate)" id="stream-substatus">Configure inputs and click Generate with AI.</span></div>
+      </div>
+      <div id="ai-steps"></div>
+      <div id="gen-output" style="display:none">
+        <h4 style="margin-top:18px">Generated draft</h4>
+        <div class="gen-doc" id="gen-doc"></div>
+        <div style="margin-top:10px; display:flex; gap:8px; justify-content:flex-end">
+          <button class="secondary" onclick="sendToReview()">Send to human review</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout purple">
+    <strong>The shift:</strong> v1 had 350 templates, each managed and versioned. v2 has one corpus and one prompt. Adding a new variation means adding to the corpus, not creating template #351. The agent decides what to use.
+  </div>
+</section>
+
+<!-- ============= CORPUS ============= -->
+<section class="panel" id="panel-corpus">
+  <h2>Corpus Library</h2>
+  <p class="lede">The historical templates aren't templates anymore — they're <strong>training data</strong> that the agent retrieves from at generation time. Think of this as a vector store of legal precedent + current regulatory text.</p>
+
+  <div class="grid-3" style="margin-bottom:20px">
+    <div class="stat"><div class="num" id="cstat-docs">347</div><div class="label">Historical docs indexed</div></div>
+    <div class="stat"><div class="num" id="cstat-clauses">1,842</div><div class="label">Clauses extracted</div></div>
+    <div class="stat"><div class="num" id="cstat-countries">14</div><div class="label">Countries covered</div></div>
+  </div>
+
+  <div class="callout amber">
+    <strong>Where humans stay in the loop here:</strong> ingestion approval (does this doc enter the corpus?), tagging (what jurisdiction / event class?), and periodic drift detection (are we generating things that diverge from corpus statistics in unexpected ways?).
+  </div>
+
+  <h3>Sample of indexed corpus</h3>
+  <div id="corpus-list"></div>
+</section>
+
+<!-- ============= UPDATE ============= -->
+<section class="panel" id="panel-update">
+  <h2>Drop in Legal Update</h2>
+  <p class="lede"><em>The canonical scenario:</em> a new addendum must be added to employment agreements in a particular jurisdiction. The legal language is dropped into the agent's corpus, and any future generation matching that jurisdiction reflects it — no template edits, no deployments. Try it.</p>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 style="margin-top:0">Add new legal language</h3>
+      <div><label>Jurisdiction</label>
+        <select id="upd-country">
+          <option value="ES">Spain</option>
+          <option value="FI">Finland</option>
+          <option value="US">United States</option>
+          <option value="DE">Germany</option>
+        </select>
+      </div>
+      <div style="margin-top:10px"><label>Applies to events</label>
+        <select id="upd-event" multiple size="4">
+          <option value="employee.hired" selected>Employee hired</option>
+          <option value="employee.role_changed">Role change</option>
+          <option value="employee.terminated">Termination</option>
+          <option value="annual.compensation_cycle">Annual comp cycle</option>
+        </select>
+      </div>
+      <div style="margin-top:10px"><label>Source</label>
+        <select id="upd-source">
+          <option>Internal Legal — Spanish Employment Counsel</option>
+          <option>Boletín Oficial del Estado (BOE)</option>
+          <option>External counsel memo</option>
+          <option>Regulatory advisory feed</option>
+        </select>
+      </div>
+      <div style="margin-top:10px"><label>Legal text</label>
+        <textarea id="upd-text" rows="6">Effective 1 May 2026, employment agreements in Spain must include the following provision: "El empleado tiene derecho a desconectarse digitalmente fuera del horario laboral. La empresa garantizará el respeto del tiempo de descanso, vacaciones y permisos personales del trabajador, así como su intimidad personal y familiar." [Right to digital disconnection — RD-Ley 28/2020 update].</textarea>
+      </div>
+      <div style="margin-top:12px"><button onclick="ingestUpdate()">Ingest into corpus</button></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">Ingestion status</h3>
+      <div id="ingest-status">
+        <div class="callout purple" style="margin:0">No update ingested yet. Drop in legal text to see the agent absorb it.</div>
+      </div>
+      <h4 style="margin-top:18px">Recent ingestions</h4>
+      <div id="recent-ingestions" style="font-size:12px; color:var(--slate)">None yet.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">Try it</h3>
+    <p style="font-size:13px">After ingesting, switch to <strong>Generate Document</strong>, set Country = Spain and Document Type = Employee hired, and generate. The new clause appears in the output. Same agent, no template edits, no deploy.</p>
+  </div>
+</section>
+
+<!-- ============= REVIEW ============= -->
+<section class="panel" id="panel-review">
+  <h2>Human Review Queue</h2>
+  <p class="lede">When automation generates content rather than rendering templates, governance shifts from "review every template" to "review the model's outputs strategically": <strong>first-time per combination + risk-weighted sampling</strong>.</p>
+
+  <div class="grid-3" style="margin-bottom:20px">
+    <div class="stat"><div class="num">100%</div><div class="label">First-time review (per event × country × worker_type)</div></div>
+    <div class="stat"><div class="num">5%</div><div class="label">Random sampling, all subsequent</div></div>
+    <div class="stat"><div class="num">100%</div><div class="label">Compensation > €150K (high-risk)</div></div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">Review policy (configurable)</h3>
+    <table>
+      <thead><tr><th>Trigger</th><th>Reviewer</th><th>SLA</th><th>Block until reviewed?</th></tr></thead>
+      <tbody>
+        <tr><td>First time generating for a (country × event × worker_type) combo</td><td>Employment Counsel</td><td>5 business days</td><td><span class="badge red">Yes</span></td></tr>
+        <tr><td>Legal update ingested in last 30 days, first 10 outputs</td><td>Employment Counsel</td><td>2 business days</td><td><span class="badge red">Yes</span></td></tr>
+        <tr><td>Compensation > €150K</td><td>Senior Counsel + HRBP</td><td>1 business day</td><td><span class="badge red">Yes</span></td></tr>
+        <tr><td>Cross-border (employee country ≠ entity country)</td><td>Counsel + Mobility</td><td>3 business days</td><td><span class="badge red">Yes</span></td></tr>
+        <tr><td>Drift alert (output diverges from corpus statistics)</td><td>Platform + Counsel</td><td>Real-time</td><td><span class="badge red">Yes</span></td></tr>
+        <tr><td>Random 5% sample, steady state</td><td>Counsel rotation</td><td>Async, weekly batch</td><td><span class="badge green">No</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Open queue</h3>
+  <div id="review-queue"></div>
+</section>
+
+<!-- ============= NOTES ============= -->
+<section class="panel" id="panel-notes">
+  <div class="memo">
+    <h2>The RAG-Generated Approach</h2>
+
+    <h3>The core paradigm shift</h3>
+    <p>The template-engine approach treats templates as <strong>artifacts</strong> — versioned, owned, lifecycle-managed. The RAG approach treats templates as <strong>training data</strong> for an agent that synthesizes documents on demand.</p>
+    <p>The ~350 historical employment agreements in the corpus stop being 350 things to maintain. They become a sample distribution the agent learns from. Adding a new country means adding a few examples to the corpus, not building a new template.</p>
+
+    <h3>What this approach removes</h3>
+    <ul>
+      <li><strong>The template registry.</strong> Replaced by a corpus and ingestion pipeline.</li>
+      <li><strong>Template-by-template legal review.</strong> Replaced by output sampling and first-time review per combination.</li>
+      <li><strong>Hand-coded eligibility rules.</strong> The agent infers what to retrieve from the request context.</li>
+      <li><strong>Template versioning as a primary concern.</strong> Replaced by corpus versioning — which texts are canonical at any given moment.</li>
+    </ul>
+
+    <h3>What this approach requires that does not exist today</h3>
+    <ul>
+      <li><strong>An LLM with strong legal-reasoning behavior</strong>, prompted or tuned to maintain legal precision. Current frontier models are close, not perfect.</li>
+      <li><strong>Drift detection.</strong> Statistical monitoring of outputs vs. corpus, to flag when the model is generating content unlike anything in the corpus.</li>
+      <li><strong>Audit log of retrievals.</strong> For every generated doc, a record of what the model pulled and why — needed for legal defensibility.</li>
+      <li><strong>A defined response to hallucination scenarios.</strong> Extractive citations, retrieval-augmented constraints, and sample review form the mitigation layer.</li>
+    </ul>
+
+    <h3>Where humans remain in the loop</h3>
+    <ol>
+      <li><strong>Ingestion gate.</strong> Corpus updates require legal sign-off before going live.</li>
+      <li><strong>First-time review.</strong> The first generated output for any new (country × event × worker class) combination is human-reviewed.</li>
+      <li><strong>High-risk classes always reviewed.</strong> Senior compensation, cross-border employment, terminations, and other regulated cases.</li>
+      <li><strong>Drift alerts.</strong> Anomaly detection on the output distribution.</li>
+    </ol>
+
+    <h3>Strengths relative to a deterministic template engine</h3>
+    <ul>
+      <li>Adding the 351st template is effectively free.</li>
+      <li>Updating regulations across N templates simultaneously is one corpus update, not N template edits.</li>
+      <li>Vendor scope for legal/data matrix work becomes annotation on the corpus — faster than rewriting hundreds of templates.</li>
+      <li>The "drop in a new clause for jurisdiction X" workflow is direct: ingest into the corpus, and the next matching generation reflects it.</li>
+    </ul>
+
+    <h3>Weaknesses relative to a deterministic template engine</h3>
+    <ul>
+      <li>Legal defensibility is harder. "Rendered template v3.2" is auditable; "the LLM said this" is messier.</li>
+      <li>Hallucination risk is real, even with RAG. A wrong clause is potentially a contract dispute.</li>
+      <li>Behavior changes as the model changes. The deterministic engine is reproducible by design; RAG requires versioned model + corpus to be reproducible.</li>
+      <li>Cost per generation is non-zero (LLM tokens). At 16,000 docs per year × N tokens, this is a meaningful operating cost.</li>
+    </ul>
+
+    <h3>Where this approach fits</h3>
+    <p>The most coherent positioning is not "RAG instead of templates" but <em>"RAG where templates can't reach."</em> Deterministic templates are the right fit for high-volume, low-variation, deterministic flows. The RAG agent is the right fit for low-volume, high-variation, novel-jurisdiction flows — a new country opening, a non-standard separation, a custom retention agreement.</p>
+    <p>The recommended product configuration is: <em>an engine that knows when to call the agent</em>. Default to deterministic templates; route to RAG-generated drafts when the registry has no match or the request crosses pre-set complexity thresholds.</p>
+  </div>
+</section>
+
+</main>
+
+<script>
+// =============================================================
+// CORPUS — historical document samples (the "training data")
+// =============================================================
+const CORPUS = [
+  {id: 'c1', country: 'ES', event: 'employee.hired', source: 'Wolt Spain · 2024 EA template', tags: ['probation', 'spanish-law', 'standard'], snippet: 'El periodo de prueba será de seis meses, durante el cual cualquiera de las partes puede rescindir el contrato sin previo aviso.', clause_type: 'probation_period'},
+  {id: 'c2', country: 'ES', event: 'employee.hired', source: 'Wolt Spain · 2025 EA v3.1', tags: ['working-hours', 'collective-agreement'], snippet: 'La jornada laboral será de 40 horas semanales, distribuidas según convenio colectivo aplicable. El trabajador gozará de las pausas establecidas legalmente.', clause_type: 'working_hours'},
+  {id: 'c3', country: 'ES', event: 'employee.hired', source: 'BOE — Estatuto de los Trabajadores §14', tags: ['statute', 'authoritative'], snippet: 'El trabajador tendrá derecho a 30 días naturales de vacaciones anuales retribuidas, salvo pacto en contrario en convenio colectivo.', clause_type: 'vacation'},
+  {id: 'c4', country: 'FI', event: 'employee.hired', source: 'Wolt Finland · 2025 EA', tags: ['finnish-law', 'standard'], snippet: 'The probation period shall be 6 months, in accordance with Finnish Employment Contracts Act. Either party may terminate during probation without notice.', clause_type: 'probation_period'},
+  {id: 'c5', country: 'US', event: 'employee.hired', source: 'DoorDash US · 2025 Offer Letter', tags: ['at-will', 'standard'], snippet: 'Your employment is at-will, meaning either you or the Company may terminate the employment relationship at any time, with or without cause.', clause_type: 'at_will'},
+  {id: 'c6', country: 'ES', event: 'employee.hired', source: 'Wolt Spain · 2025 EA', tags: ['compensation'], snippet: 'La retribución bruta anual será de {{compensation}}, distribuida en 14 pagas mensuales, incluyendo las pagas extraordinarias de junio y diciembre.', clause_type: 'compensation_structure'},
+  {id: 'c7', country: 'ES', event: 'employee.terminated', source: 'Wolt Spain · 2024 separation', tags: ['indemnification', 'spanish-law'], snippet: 'Conforme al artículo 53 del Estatuto de los Trabajadores, se reconoce una indemnización equivalente a 20 días de salario por año de servicio.', clause_type: 'severance'},
+  {id: 'c8', country: 'FI', event: 'employee.compensation_changed', source: 'Wolt Finland · 2025 comp letter', tags: ['comp-adjustment'], snippet: 'Effective {{effective_date}}, your annualized base salary will be adjusted to {{compensation}} EUR. All other terms of your employment remain in full effect.', clause_type: 'compensation_adjustment'},
+  {id: 'c9', country: 'ES', event: 'employee.role_changed', source: 'Wolt Spain · 2025 promotion addendum', tags: ['role-change'], snippet: 'Mediante el presente anexo, las partes acuerdan modificar la categoría profesional del trabajador a {{new_role}}, con efecto desde {{effective_date}}.', clause_type: 'role_change'},
+  {id: 'c10', country: 'ES', event: 'employee.hired', source: 'BOE — Ley Orgánica 3/2018 de Protección de Datos', tags: ['gdpr', 'spanish-law'], snippet: 'Los datos personales del trabajador serán tratados con la finalidad de mantener la relación laboral, conforme al RGPD y a la LOPDGDD.', clause_type: 'data_protection'},
+];
+
+let DYNAMIC_CORPUS_UPDATES = []; // ingested updates
+
+// Sample document outputs keyed by event+country (theatrical generation)
+function synthesizeDocument(ctx) {
+  const {country, event, name, role, start, comp, brand} = ctx;
+  const dateLine = new Date().toLocaleDateString('en-US', {year: 'numeric', month: 'long', day: 'numeric'});
+  const newClauses = DYNAMIC_CORPUS_UPDATES.filter(u =>
+    u.country === country && u.events.includes(event)
+  );
+
+  let body = '';
+  if (event === 'employee.hired' && country === 'ES') {
+    body = `${dateLine}
+
+Estimada ${name},
+
+Nos complace ofrecerte el puesto de ${role} en ${brandName(brand)}, con fecha de inicio el ${start}. Tu retribución bruta anual será de ${comp}, distribuida en 14 pagas.
+
+El periodo de prueba será de seis meses, conforme al Estatuto de los Trabajadores. Tu jornada laboral será de 40 horas semanales, distribuidas según convenio colectivo aplicable.
+
+Tendrás derecho a 30 días naturales de vacaciones anuales retribuidas. Tus datos personales serán tratados conforme al RGPD y a la LOPDGDD.${newClauses.length ? '\n\n' + newClauses.map(c => `[Cláusula actualizada — ${c.source}]\n${c.text}`).join('\n\n') : ''}
+
+Por favor, firma a continuación para confirmar la aceptación de esta oferta.
+
+Atentamente,
+${brandName(brand)}`;
+  } else if (event === 'employee.hired' && country === 'FI') {
+    body = `${dateLine}
+
+Tervetuloa, ${name}!
+
+We are pleased to offer you the position of ${role} at ${brandName(brand)}, beginning ${start}. Your gross annual compensation will be ${comp}.
+
+This offer is subject to Finnish employment law, including a probation period of 6 months under the Employment Contracts Act. Your working hours, vacation entitlements, and notice periods follow the applicable collective bargaining agreement.${newClauses.length ? '\n\n' + newClauses.map(c => `[Updated provision — ${c.source}]\n${c.text}`).join('\n\n') : ''}
+
+Please sign below to confirm acceptance.`;
+  } else if (event === 'employee.hired' && country === 'US') {
+    body = `${dateLine}
+
+Dear ${name},
+
+We are pleased to offer you the position of ${role} at ${brandName(brand)}, with a start date of ${start}. Your annualized base compensation will be ${comp}.
+
+Your employment is at-will, meaning either you or the Company may terminate the relationship at any time, with or without cause. This offer is contingent upon successful background checks and your acceptance of our standard NDA and Code of Conduct.${newClauses.length ? '\n\n' + newClauses.map(c => `[Updated clause — ${c.source}]\n${c.text}`).join('\n\n') : ''}
+
+By signing below, you confirm acceptance.`;
+  } else if (event === 'employee.compensation_changed') {
+    body = `${dateLine}
+
+Dear ${name},
+
+Effective ${start}, your annualized base compensation will be adjusted to ${comp}. All other terms of your employment remain unchanged.${newClauses.length ? '\n\n' + newClauses.map(c => `[Updated clause — ${c.source}]\n${c.text}`).join('\n\n') : ''}
+
+Please acknowledge by signing below.`;
+  } else if (event === 'employee.terminated') {
+    body = `${dateLine}
+
+${name},
+
+This letter confirms the conclusion of your employment with ${brandName(brand)}, effective ${start}.
+
+${country === 'ES' ? 'Conforme al artículo 53 del Estatuto de los Trabajadores, se reconoce una indemnización equivalente a 20 días de salario por año de servicio. ' : ''}Please review the attached terms regarding final pay, benefits continuation, and the return of company property. Your final paycheck will be processed per standard payroll cycle.${newClauses.length ? '\n\n' + newClauses.map(c => `[Updated provision — ${c.source}]\n${c.text}`).join('\n\n') : ''}
+
+Sign below to acknowledge.`;
+  } else if (event === 'employee.role_changed') {
+    body = `${dateLine}
+
+Dear ${name},
+
+Effective ${start}, you are being promoted to ${role}. Your new annualized base compensation will be ${comp}. All other terms of your employment continue in full effect, except as modified herein.${newClauses.length ? '\n\n' + newClauses.map(c => `[Updated provision — ${c.source}]\n${c.text}`).join('\n\n') : ''}
+
+Please sign to confirm acceptance.`;
+  } else if (event === 'annual.compensation_cycle') {
+    body = `${dateLine}
+
+Dear ${name},
+
+As part of the 2026 annual compensation review, your base compensation will be adjusted to ${comp}, effective ${start}. This adjustment reflects your contribution and the company's annual review process.${newClauses.length ? '\n\n' + newClauses.map(c => `[Updated provision — ${c.source}]\n${c.text}`).join('\n\n') : ''}
+
+Please sign to acknowledge.`;
+  } else if (event === 'employee.relocation') {
+    body = `${dateLine}
+
+Dear ${name},
+
+This letter confirms your international relocation, effective ${start}, to support your role as ${role}. Your compensation, benefits, and tax treatment will be adjusted to reflect your new home country, with applicable mobility allowances and relocation support.${newClauses.length ? '\n\n' + newClauses.map(c => `[Updated provision — ${c.source}]\n${c.text}`).join('\n\n') : ''}
+
+Please sign below to acknowledge.`;
+  } else {
+    body = `${dateLine}\n\nDear ${name},\n\n[The agent could not synthesize a draft for this event in this jurisdiction. Routed to human authoring queue.]`;
+  }
+  return body;
+}
+
+function brandName(b) {
+  return ({wolt: 'Wolt Enterprises Oy', doordash: 'DoorDash, Inc.', deliveroo: 'Deliveroo Holdings Ltd.'})[b] || b;
+}
+
+// =============================================================
+// AI GENERATION FLOW (theatrical)
+// =============================================================
+function generate() {
+  document.getElementById('ai-steps').innerHTML = '';
+  document.getElementById('gen-output').style.display = 'none';
+  document.getElementById('gen-doc').innerHTML = '';
+  const header = document.getElementById('stream-header');
+  header.classList.remove('idle', 'done');
+  document.getElementById('stream-status').textContent = 'Working...';
+  document.getElementById('stream-substatus').textContent = 'Agent is reasoning across the corpus.';
+
+  const ctx = {
+    name: document.getElementById('emp-name').value,
+    role: document.getElementById('emp-role').value,
+    country: document.getElementById('emp-country').value,
+    brand: document.getElementById('emp-brand').value,
+    workerType: document.getElementById('emp-worker-type').value,
+    start: document.getElementById('emp-start').value,
+    comp: document.getElementById('emp-comp').value,
+    event: document.getElementById('trigger-select').value,
+  };
+
+  const relevantCorpus = CORPUS.filter(c => c.country === ctx.country && c.event === ctx.event);
+  const newClauses = DYNAMIC_CORPUS_UPDATES.filter(u =>
+    u.country === ctx.country && u.events.includes(ctx.event)
+  );
+
+  const steps = [
+    {label: `Parsing request: <strong>${eventLabel(ctx.event)}</strong> · ${ctx.country} · ${ctx.workerType}`, detail: 'Identifying jurisdiction, employment class, and applicable regulatory regime.'},
+    {label: `Querying corpus (347 documents indexed)`, detail: `Found ${relevantCorpus.length} highly relevant precedent documents for ${ctx.country} / ${eventLabel(ctx.event)}.`},
+    {label: `Retrieving canonical clauses`, detail: relevantCorpus.length ? `Pulling ${Math.min(relevantCorpus.length, 5)} clauses across ${[...new Set(relevantCorpus.map(c => c.clause_type))].length} categories.` : 'No prior precedent — synthesizing from base employment law.'},
+    ...(newClauses.length ? [{label: `<span style="color:var(--purple)">⚡ Found ${newClauses.length} recent legal update(s)</span>`, detail: `${newClauses.map(c => c.source).join('; ')} — applying to draft.`}] : []),
+    {label: 'Synthesizing draft tailored to context', detail: `Composing in document language for ${ctx.country}, with employee-specific variables resolved.`},
+    {label: 'Self-checking against retrieval', detail: 'Verifying every clause is grounded in retrieved sources — no hallucinated obligations.'},
+    {label: 'Routing to review per policy', detail: 'Checking review rules: first-time? high-risk? ingestion-aged?'},
+  ];
+
+  const stepsEl = document.getElementById('ai-steps');
+  let i = 0;
+  function nextStep() {
+    if (i >= steps.length) {
+      header.classList.add('done');
+      document.getElementById('stream-status').textContent = 'Draft complete.';
+      document.getElementById('stream-substatus').textContent = 'Review the synthesized document below.';
+      streamDocument(ctx, relevantCorpus);
+      return;
+    }
+    const s = steps[i];
+    const div = document.createElement('div');
+    div.className = 'ai-step thinking';
+    div.innerHTML = `<div class="step-icon">${i+1}</div><div class="step-body"><strong>${s.label}</strong><div class="step-detail">${s.detail}</div></div>`;
+    stepsEl.appendChild(div);
+    setTimeout(() => div.classList.add('visible'), 30);
+
+    // After step 2 (retrieval), show some corpus snippets
+    if (i === 2 && relevantCorpus.length) {
+      const snippetContainer = div.querySelector('.step-body');
+      relevantCorpus.slice(0, 3).forEach((c, idx) => {
+        const snippet = document.createElement('div');
+        snippet.className = 'corpus-snippet';
+        snippet.innerHTML = `<div class="src">${c.source} · ${c.clause_type}</div>${c.snippet}`;
+        snippetContainer.appendChild(snippet);
+        setTimeout(() => snippet.classList.add('visible'), 200 + idx * 250);
+      });
+    }
+
+    setTimeout(() => {
+      div.classList.remove('thinking');
+      div.classList.add('done');
+      i++;
+      nextStep();
+    }, i === 2 && relevantCorpus.length ? 1500 : 700);
+  }
+  setTimeout(nextStep, 400);
+}
+
+function streamDocument(ctx, sources) {
+  const out = document.getElementById('gen-output');
+  out.style.display = 'block';
+  const docEl = document.getElementById('gen-doc');
+  docEl.innerHTML = '';
+
+  const body = synthesizeDocument(ctx);
+  const lines = body.split('\n');
+  // Render lines with cursor
+  lines.forEach((l, idx) => {
+    const ld = document.createElement('div');
+    ld.className = 'gen-doc-line';
+    ld.innerHTML = l.trim() ? escapeHTML(l) : '&nbsp;';
+    docEl.appendChild(ld);
+  });
+  const lineEls = docEl.querySelectorAll('.gen-doc-line');
+  let li = 0;
+  function showLine() {
+    if (li >= lineEls.length) return;
+    lineEls[li].classList.add('visible');
+    li++;
+    setTimeout(showLine, 100);
+  }
+  showLine();
+}
+
+function eventLabel(e) {
+  return ({
+    'employee.hired': 'Hire',
+    'employee.compensation_changed': 'Comp change',
+    'employee.role_changed': 'Role change',
+    'employee.terminated': 'Termination',
+    'annual.compensation_cycle': 'Annual comp cycle',
+    'employee.relocation': 'Relocation',
+  })[e] || e;
+}
+
+function reset() {
+  document.getElementById('ai-steps').innerHTML = '';
+  document.getElementById('gen-output').style.display = 'none';
+  document.getElementById('gen-doc').innerHTML = '';
+  const header = document.getElementById('stream-header');
+  header.classList.remove('done');
+  header.classList.add('idle');
+  document.getElementById('stream-status').textContent = 'Idle.';
+  document.getElementById('stream-substatus').textContent = 'Configure inputs and click Generate with AI.';
+}
+
+// =============================================================
+// CORPUS RENDERING
+// =============================================================
+function renderCorpus() {
+  const list = document.getElementById('corpus-list');
+  list.innerHTML = '';
+  CORPUS.forEach(c => {
+    const card = document.createElement('div');
+    card.className = 'corpus-card';
+    card.innerHTML = `
+      <div class="corpus-card-head">
+        <div>
+          <strong>${c.source}</strong>
+          <span class="badge">${c.clause_type}</span>
+        </div>
+        <span class="badge slate">${c.country} · ${eventLabel(c.event)}</span>
+      </div>
+      <div class="meta">Tags: ${c.tags.join(' · ')}</div>
+      <div class="preview">${c.snippet}</div>
+    `;
+    list.appendChild(card);
+  });
+  // Append dynamic ingestions
+  DYNAMIC_CORPUS_UPDATES.forEach(u => {
+    const card = document.createElement('div');
+    card.className = 'corpus-card';
+    card.style.borderColor = 'var(--purple)';
+    card.style.background = 'var(--purple-bg)';
+    card.innerHTML = `
+      <div class="corpus-card-head">
+        <div>
+          <strong>${u.source}</strong>
+          <span class="badge">recent ingestion</span>
+        </div>
+        <span class="badge">${u.country} · ${u.events.map(eventLabel).join(', ')}</span>
+      </div>
+      <div class="meta">Ingested: ${u.ingested_at}</div>
+      <div class="preview">${u.text}</div>
+    `;
+    list.appendChild(card);
+  });
+}
+
+// =============================================================
+// INGESTION
+// =============================================================
+function ingestUpdate() {
+  const country = document.getElementById('upd-country').value;
+  const events = Array.from(document.getElementById('upd-event').selectedOptions).map(o => o.value);
+  const source = document.getElementById('upd-source').value;
+  const text = document.getElementById('upd-text').value;
+  if (!text.trim() || !events.length) { alert('Pick events and provide text.'); return; }
+
+  const status = document.getElementById('ingest-status');
+  status.innerHTML = '';
+  const steps = [
+    `▶ Validating jurisdiction tag (${country})`,
+    `▶ Detected ${events.length} affected event class(es): ${events.map(eventLabel).join(', ')}`,
+    `▶ Extracting clause structure (provisions, effective dates, citations)`,
+    `▶ Embedding into vector store · upserting to active corpus`,
+    `▶ Routing first 10 outputs to mandatory legal review (per policy)`,
+    `<span style="color:var(--green)">✓ Ingestion complete. Agent will use this language on next generation matching ${country} + ${events.map(eventLabel).join('/')}</span>`,
+  ];
+  let i = 0;
+  function show() {
+    if (i >= steps.length) {
+      DYNAMIC_CORPUS_UPDATES.push({
+        country, events, source, text,
+        ingested_at: new Date().toLocaleString(),
+      });
+      renderCorpus();
+      renderRecentIngestions();
+      // Add to review queue
+      QUEUE.unshift({
+        kind: 'first_after_update',
+        title: `First Spain hire EA after ${source} ingestion`,
+        country, events,
+        why: `New legal language ingested ${new Date().toLocaleDateString()}. Mandatory first-output review per policy.`,
+        sla: '2 business days',
+      });
+      renderQueue();
+      return;
+    }
+    const div = document.createElement('div');
+    div.style.fontSize = '12px'; div.style.padding = '4px 0'; div.style.color = 'var(--slate)';
+    div.innerHTML = steps[i];
+    status.appendChild(div);
+    i++;
+    setTimeout(show, 350);
+  }
+  show();
+}
+
+function renderRecentIngestions() {
+  const el = document.getElementById('recent-ingestions');
+  if (!DYNAMIC_CORPUS_UPDATES.length) { el.textContent = 'None yet.'; return; }
+  el.innerHTML = DYNAMIC_CORPUS_UPDATES.slice(-5).reverse().map(u => `
+    <div style="padding:8px 0; border-bottom:1px solid var(--border)">
+      <div style="font-weight:500">${u.source}</div>
+      <div style="font-size:11px; color:var(--slate)">${u.country} · ${u.events.map(eventLabel).join(', ')} · ${u.ingested_at}</div>
+    </div>
+  `).join('');
+}
+
+// =============================================================
+// REVIEW QUEUE
+// =============================================================
+let QUEUE = [
+  {kind: 'first_combo', title: 'First contingent → employee conversion EA (Spain)', country: 'ES', events: ['employee.contingent_converted'], why: 'No prior generation for this combination of jurisdiction + worker class transition.', sla: '5 business days'},
+  {kind: 'high_risk', title: 'Senior leadership offer letter — €280K base', country: 'UK', events: ['employee.hired'], why: 'Compensation > €150K threshold. Senior counsel + HRBP review required.', sla: '1 business day'},
+  {kind: 'cross_border', title: 'Mobility addendum — US → Germany transfer', country: 'DE', events: ['employee.relocation'], why: 'Cross-border employment transfer. Tax/legal/mobility joint review.', sla: '3 business days'},
+  {kind: 'sample', title: 'Sampled output — Wolt Finland comp adjustment', country: 'FI', events: ['employee.compensation_changed'], why: 'Random 5% sample. Async review.', sla: 'Weekly batch'},
+];
+
+function renderQueue() {
+  const el = document.getElementById('review-queue');
+  el.innerHTML = '';
+  QUEUE.forEach((q, idx) => {
+    const div = document.createElement('div');
+    div.className = 'review-item';
+    const icon = ({first_combo: '🆕', first_after_update: '⚡', high_risk: '⚠️', cross_border: '🌍', sample: '🎲'})[q.kind] || '📄';
+    const blocker = q.kind === 'sample' ? '<span class="badge green">Async — non-blocking</span>' : '<span class="badge red">Blocking</span>';
+    div.innerHTML = `
+      <div class="review-icon">${icon}</div>
+      <div class="review-meta">
+        <strong>${q.title}</strong> ${blocker}
+        <div style="font-size:12px; color:var(--slate); margin-top:4px">${q.why}</div>
+        <div style="font-size:11px; color:var(--slate); margin-top:4px">SLA: ${q.sla}</div>
+      </div>
+      <div class="review-actions">
+        <button class="secondary" onclick="approveItem(${idx})">Approve</button>
+        <button class="secondary" onclick="reviseItem(${idx})">Request revisions</button>
+      </div>
+    `;
+    el.appendChild(div);
+  });
+}
+
+function approveItem(idx) {
+  QUEUE.splice(idx, 1);
+  renderQueue();
+}
+function reviseItem(idx) {
+  alert('Revisions sent to corpus owner. Item retained in queue for re-review.');
+}
+
+function sendToReview() {
+  QUEUE.unshift({
+    kind: 'sample',
+    title: 'Output from latest generation',
+    country: document.getElementById('emp-country').value,
+    events: [document.getElementById('trigger-select').value],
+    why: 'Sent for review by user from generation panel.',
+    sla: 'Async',
+  });
+  alert('Sent to review queue.');
+  // Switch to review tab
+  document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+  document.querySelector('.tab[data-tab="review"]').classList.add('active');
+  document.getElementById('panel-review').classList.add('active');
+  renderQueue();
+}
+
+function escapeHTML(s) { return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// =============================================================
+// INIT
+// =============================================================
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('panel-' + t.dataset.tab).classList.add('active');
+  });
+});
+renderCorpus();
+renderQueue();
+</script>
+
+</body>
+</html>

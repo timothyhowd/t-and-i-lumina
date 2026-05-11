@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lumina v3 — Regulation-Native</title>
+<style>
+  :root {
+    --navy: #0b2545; --navy-2: #13315c;
+    --slate: #475569; --slate-2: #64748b;
+    --bg: #f8fafc; --card: #ffffff; --border: #e2e8f0;
+    --green: #16a34a; --green-bg: #f0fdf4;
+    --amber: #d97706; --amber-bg: #fffbeb;
+    --red: #dc2626; --red-bg: #fef2f2;
+    --accent: #0891b2; --accent-bg: #ecfeff;
+    --teal: #0d9488; --teal-bg: #f0fdfa;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { font-family: -apple-system, "Inter", sans-serif; background: var(--bg); color: #1e293b; line-height: 1.5; font-size: 14px; }
+  header.top { background: var(--navy); color: white; padding: 18px 28px; border-bottom: 4px solid var(--teal); }
+  header.top h1 { font-size: 18px; font-weight: 600; }
+  header.top .sub { font-size: 12px; opacity: 0.75; margin-top: 2px; }
+  header.top .pill { background: var(--teal); padding: 1px 8px; border-radius: 4px; margin-left: 8px; font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; font-weight: 700; }
+  .tabs { display: flex; background: white; border-bottom: 1px solid var(--border); padding: 0 24px; position: sticky; top: 0; z-index: 10; overflow-x: auto; }
+  .tab { padding: 14px 18px; cursor: pointer; border-bottom: 2px solid transparent; font-size: 13px; font-weight: 500; color: var(--slate); white-space: nowrap; }
+  .tab.active { color: var(--navy); border-bottom-color: var(--teal); }
+  .tab:hover:not(.active) { color: var(--navy-2); background: #f8fafc; }
+  main { padding: 24px 28px; max-width: 1400px; margin: 0 auto; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  h2 { font-size: 18px; margin-bottom: 4px; color: var(--navy); }
+  h3 { font-size: 15px; margin: 18px 0 8px; color: var(--navy-2); }
+  h4 { font-size: 13px; margin: 12px 0 6px; color: var(--slate); text-transform: uppercase; letter-spacing: 0.05em; }
+  p { margin-bottom: 10px; }
+  .lede { color: var(--slate); margin-bottom: 16px; font-size: 13px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 18px; margin-bottom: 16px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+  label { display: block; font-size: 12px; color: var(--slate); margin-bottom: 4px; font-weight: 500; }
+  input, select, textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; font-family: inherit; background: white; }
+  textarea { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--teal); outline-offset: -1px; }
+  button { background: var(--teal); color: white; padding: 10px 16px; border: none; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; }
+  button:hover { filter: brightness(1.1); }
+  button.secondary { background: white; color: var(--navy); border: 1px solid var(--border); }
+  button.secondary:hover { background: var(--bg); }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; background: var(--teal-bg); color: var(--teal); }
+  .badge.green { background: var(--green-bg); color: var(--green); }
+  .badge.amber { background: var(--amber-bg); color: var(--amber); }
+  .badge.red { background: var(--red-bg); color: var(--red); }
+  .badge.slate { background: #f1f5f9; color: var(--slate); }
+
+  /* Reg pull theatre */
+  .reg-fetch {
+    background: linear-gradient(180deg, var(--teal-bg) 0%, white 100%);
+    border: 1px solid var(--teal);
+    border-radius: 12px;
+    padding: 22px;
+    min-height: 600px;
+  }
+  .source-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: white; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; opacity: 0; transform: translateY(4px); transition: opacity 0.4s, transform 0.4s; }
+  .source-head.visible { opacity: 1; transform: translateY(0); }
+  .source-head .src-pulse { width: 10px; height: 10px; border-radius: 50%; background: var(--teal); animation: pulse 1.2s ease-in-out infinite; }
+  .source-head.connected .src-pulse { background: var(--green); animation: none; }
+  .source-head.connected .src-pulse::after { content: ''; }
+  .source-head .src-name { font-weight: 600; font-size: 13px; }
+  .source-head .src-status { margin-left: auto; font-size: 11px; color: var(--slate); }
+  @keyframes pulse { 0%, 100% { opacity: 0.4; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1.15); } }
+
+  .clause-pulled {
+    background: white; border: 1px solid var(--border); border-radius: 6px;
+    padding: 10px 12px; margin: 6px 0 6px 32px; font-size: 12px;
+    opacity: 0; max-height: 0; overflow: hidden;
+    transition: opacity 0.4s, max-height 0.5s, padding 0.4s, margin 0.4s;
+  }
+  .clause-pulled.visible { opacity: 1; max-height: 200px; padding: 10px 12px; margin: 6px 0 6px 32px; }
+  .clause-pulled .clause-cite { font-size: 10px; color: var(--teal); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+  .clause-pulled .clause-text { font-family: Georgia, serif; font-style: italic; color: #1e293b; }
+
+  /* Document with citations */
+  .reg-doc {
+    background: white; border: 1px solid var(--border); border-radius: 6px;
+    padding: 28px 36px; font-family: Georgia, serif; font-size: 13.5px; line-height: 1.85;
+    margin-top: 16px;
+  }
+  .reg-doc-line { margin-bottom: 6px; opacity: 0; transform: translateY(4px); transition: opacity 0.4s, transform 0.4s; min-height: 1.2em; }
+  .reg-doc-line.visible { opacity: 1; transform: translateY(0); }
+  .reg-doc-line.diff-add { background: var(--green-bg); padding: 2px 4px; border-radius: 3px; }
+  .reg-doc-line.diff-rem { background: var(--red-bg); padding: 2px 4px; border-radius: 3px; text-decoration: line-through; opacity: 0.7; }
+  sup.cite { color: var(--teal); font-weight: 700; font-size: 10px; cursor: help; }
+  .footnotes { margin-top: 24px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 11px; color: var(--slate); font-family: -apple-system, sans-serif; }
+  .footnotes div { margin-bottom: 4px; opacity: 0; transition: opacity 0.4s; }
+  .footnotes div.visible { opacity: 1; }
+  .footnotes b { color: var(--teal); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  th { background: #f8fafc; font-weight: 600; color: var(--slate); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+  .stat { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 16px; text-align: center; }
+  .stat .num { font-size: 28px; font-weight: 700; color: var(--teal); }
+  .stat .label { font-size: 11px; color: var(--slate); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }
+
+  .source-card {
+    background: white; border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-bottom: 10px;
+    display: flex; gap: 14px; align-items: flex-start;
+  }
+  .source-card .src-icon { font-size: 24px; }
+  .source-card .src-meta { flex: 1; }
+  .source-card .freshness { font-size: 11px; color: var(--slate); }
+  .source-card .freshness.stale { color: var(--amber); }
+
+  .attestation-card { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-bottom: 10px; }
+  .attestation-card.signed { border-left: 4px solid var(--green); }
+  .attestation-card.pending { border-left: 4px solid var(--amber); }
+  .attestation-card.expired { border-left: 4px solid var(--red); }
+  .attestation-card .att-rule { font-size: 13px; font-weight: 500; }
+  .attestation-card .att-cite { font-size: 11px; color: var(--teal); margin-top: 4px; font-family: ui-monospace, monospace; }
+  .attestation-card .att-meta { font-size: 11px; color: var(--slate); margin-top: 6px; }
+  .attestation-card .att-actions { margin-top: 8px; display: flex; gap: 6px; }
+
+  .callout { padding: 12px 14px; border-radius: 0 6px 6px 0; margin: 14px 0; font-size: 13px; }
+  .callout.amber { background: var(--amber-bg); border-left: 3px solid var(--amber); }
+  .callout.green { background: var(--green-bg); border-left: 3px solid var(--green); }
+  .callout.teal { background: var(--teal-bg); border-left: 3px solid var(--teal); }
+
+  .memo { max-width: 820px; line-height: 1.65; }
+  .memo h2 { font-size: 22px; margin-bottom: 8px; }
+  .memo h3 { font-size: 16px; margin-top: 24px; }
+  .memo p { margin-bottom: 12px; font-size: 14px; }
+  .memo ul, .memo ol { margin: 8px 0 14px 24px; }
+  .memo li { margin-bottom: 6px; font-size: 14px; }
+  .memo strong { color: var(--navy); }
+  hr.sep { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1>Lumina — Regulation-Native <span class="badge" style="background:rgba(255,255,255,0.15); color:white">v3</span></h1>
+  <div class="sub">Don't store legal language. Query authoritative regulatory sources at generation time. Lawyers attest to rules, not document text.<span class="pill">most aggressive</span></div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <div class="tab active" data-tab="generate">Generate Document</div>
+  <div class="tab" data-tab="sources">Regulation Sources</div>
+  <div class="tab" data-tab="attestations">Lawyer Attestations</div>
+  <div class="tab" data-tab="changed">Regulation Changed Demo</div>
+  <div class="tab" data-tab="notes">Decision Notes</div>
+</nav>
+
+<main>
+
+<!-- ============= GENERATE ============= -->
+<section class="panel active" id="panel-generate">
+  <h2>Generate Document</h2>
+  <p class="lede">No template. No corpus. The agent queries authoritative regulation sources at request time, assembles required clauses, and renders a document with full citation back to source authority.</p>
+
+  <div class="card">
+    <h3 style="margin-top:0">1. Request Document</h3>
+    <div class="grid-2" style="gap:10px">
+      <div><label>Document Type</label>
+        <select id="trigger-select">
+          <option value="employee.hired">Employee hired</option>
+          <option value="employee.terminated">Termination</option>
+          <option value="employee.compensation_changed">Compensation changed</option>
+          <option value="annual.compensation_cycle">Annual comp cycle</option>
+        </select>
+      </div>
+      <div><label>Country</label>
+        <select id="emp-country">
+          <option value="ES">Spain</option>
+          <option value="FI">Finland</option>
+          <option value="US">United States</option>
+          <option value="DE">Germany</option>
+        </select>
+      </div>
+      <div><label>Employee Name</label><input id="emp-name" value="María López"></div>
+      <div><label>Role</label><input id="emp-role" value="Senior Engineer"></div>
+      <div><label>Start / Effective Date</label><input id="emp-start" value="2026-06-01"></div>
+      <div><label>Compensation</label><input id="emp-comp" value="€85,000"></div>
+    </div>
+    <div style="margin-top:14px; display:flex; gap:8px; justify-content:center">
+      <button onclick="generate()">Pull Regulations & Generate</button>
+      <button class="secondary" onclick="resetGen()">Reset</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">2. Live regulation retrieval</h3>
+    <div class="reg-fetch" id="reg-fetch">
+      <div style="color: var(--slate); font-size: 13px; padding: 40px; text-align: center; font-style: italic;" id="reg-fetch-empty">
+        Configure inputs and click Pull Regulations & Generate. The agent will connect to authoritative sources for the selected jurisdiction.
+      </div>
+      <div id="sources-list" style="display:none"></div>
+      <div id="reg-doc-output" style="display:none">
+        <h4 style="margin-top:24px">Assembled document</h4>
+        <div class="reg-doc" id="reg-doc"></div>
+        <div class="footnotes" id="reg-footnotes"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout teal">
+    <strong>The shift:</strong> v1 owns templates. v2 owns a corpus. v3 owns <em>no legal language at all</em>. Legal text lives upstream — at the regulator, the statute, the collective bargaining agreement. The system is a thin assembly layer over those sources, with citations on every clause.
+  </div>
+</section>
+
+<!-- ============= SOURCES ============= -->
+<section class="panel" id="panel-sources">
+  <h2>Regulation Sources</h2>
+  <p class="lede">Authoritative regulatory feeds the agent queries at generation time. Each source has a freshness SLA and an attestation record. Stale sources block document generation.</p>
+
+  <div class="grid-3" style="margin-bottom:20px">
+    <div class="stat"><div class="num">12</div><div class="label">Connected sources</div></div>
+    <div class="stat"><div class="num">11</div><div class="label">Fresh (&lt; 24h)</div></div>
+    <div class="stat"><div class="num">1</div><div class="label">Stale</div></div>
+  </div>
+
+  <div id="sources-detail"></div>
+
+  <div class="callout amber">
+    <strong>Where humans stay in the loop here:</strong> source onboarding (vetting that this feed is canonical for this jurisdiction), parser maintenance (when a regulator changes their feed format), and stale-source escalation (some authorities don't have APIs — manual re-attestation needed).
+  </div>
+</section>
+
+<!-- ============= ATTESTATIONS ============= -->
+<section class="panel" id="panel-attestations">
+  <h2>Lawyer Attestations</h2>
+  <p class="lede">Lawyers don't review documents — they review <strong>rules</strong>. "I attest: in Spain, indefinite-term employment requires 15-day notice during probation." That rule is signed once, applies everywhere, and re-signs only when the regulation changes.</p>
+
+  <div class="grid-3" style="margin-bottom:20px">
+    <div class="stat"><div class="num">142</div><div class="label">Active attestations</div></div>
+    <div class="stat"><div class="num">3</div><div class="label">Pending re-attestation</div></div>
+    <div class="stat"><div class="num">1</div><div class="label">Expired</div></div>
+  </div>
+
+  <div class="callout green">
+    <strong>The leverage:</strong> v1 needs lawyers to review 350 templates. v3 needs lawyers to attest to ~200 rules across all countries. Same legal coverage, far less lawyer time. And rule changes update everywhere automatically.
+  </div>
+
+  <h3>Active attestations (sample)</h3>
+  <div id="attestations-list"></div>
+</section>
+
+<!-- ============= CHANGED ============= -->
+<section class="panel" id="panel-changed">
+  <h2>Regulation Changed Demo</h2>
+  <p class="lede">A new Spanish digital disconnection law took effect. Watch the system detect it, surface it for lawyer re-attestation, and ripple through generated outputs — without any template edit, corpus update, or deploy.</p>
+
+  <div class="card">
+    <h3 style="margin-top:0">Simulate regulation change</h3>
+    <table>
+      <tr><td><strong>Source:</strong> ES — Boletín Oficial del Estado (BOE)</td></tr>
+      <tr><td><strong>Change:</strong> RD-Ley 28/2020 update — strengthened "right to digital disconnection" requirements for all indefinite employment contracts</td></tr>
+      <tr><td><strong>Effective:</strong> 1 May 2026</td></tr>
+    </table>
+    <div style="margin-top:14px; display:flex; gap:8px; justify-content:center">
+      <button onclick="simulateChange()" id="change-btn">Apply regulation change</button>
+      <button class="secondary" onclick="revertChange()">Revert</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">System response</h3>
+    <div id="change-log" style="font-size:13px"></div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">Diff: What an EA looks like before vs. after</h3>
+    <div id="change-diff" style="font-size:13px; color:var(--slate); font-style:italic">Apply the regulation change above to see the diff.</div>
+  </div>
+</section>
+
+<!-- ============= NOTES ============= -->
+<section class="panel" id="panel-notes">
+  <div class="memo">
+    <h2>The Regulation-Native Approach</h2>
+
+    <h3>The core paradigm shift</h3>
+    <p>The template-engine approach owns templates. The RAG approach owns a corpus. <strong>The regulation-native approach owns nothing.</strong> Legal language lives at its source of authority — statute, regulator, collective bargaining agreement. Those sources are queried at generation time. Lawyers attest to <em>rules</em>, not document text.</p>
+
+    <h3>What this approach removes</h3>
+    <ul>
+      <li><strong>The template registry.</strong> Gone.</li>
+      <li><strong>The corpus.</strong> Gone — no internally stored legal text.</li>
+      <li><strong>Per-template legal review.</strong> Replaced by per-rule attestation: ~200 rules across all jurisdictions vs. ~900 templates.</li>
+      <li><strong>"What version of the law applies?" ambiguity.</strong> Always: whatever the source said at the moment of generation. Logged. Citable.</li>
+    </ul>
+
+    <h3>What this approach requires that does not exist today</h3>
+    <ul>
+      <li><strong>Authoritative regulation feeds.</strong> Some countries publish API-accessible regulatory data. Many do not. Where feeds are unavailable, internal counsel must maintain a structured rule database — which becomes its own canonical source.</li>
+      <li><strong>Rule extraction infrastructure.</strong> Turning regulatory prose into structured rules ("notice period: 15 days during probation") is non-trivial. Can be human-curated or LLM-assisted.</li>
+      <li><strong>Citation and provenance system.</strong> Every clause in every document must trace back to a specific rule attestation, which traces back to a specific regulation version.</li>
+      <li><strong>Stale-source detection.</strong> If a regulatory feed goes stale for 48 hours, generation in that jurisdiction must pause. Explicit policy required.</li>
+    </ul>
+
+    <h3>Where humans remain in the loop</h3>
+    <ol>
+      <li><strong>Rule attestation.</strong> Lawyers sign off on each rule before it goes active. Re-sign on regulation change.</li>
+      <li><strong>Source onboarding.</strong> Vetting that a regulatory feed is canonical for a jurisdiction.</li>
+      <li><strong>Cross-rule conflicts.</strong> When statute and collective bargaining agreement conflict, a human decides which prevails.</li>
+      <li><strong>Output spot-checks.</strong> Sampled outputs to confirm rule-to-text rendering is correct. Low frequency, since rules are deterministic once attested.</li>
+    </ol>
+
+    <h3>Strengths</h3>
+    <ul>
+      <li><strong>Always current.</strong> No "did we update template X for the new law?" — the law itself is the source.</li>
+      <li><strong>Defensible.</strong> Every clause cites a regulation. Suitable for audit.</li>
+      <li><strong>Scales across countries efficiently.</strong> Adding a new country requires wiring up the regulatory feed and attesting its rules. ~200 rules vs. ~900 templates.</li>
+      <li><strong>Regulation changes propagate automatically:</strong> a new requirement in jurisdiction X reflects in the next generation; only the new rule needs attestation.</li>
+    </ul>
+
+    <h3>Weaknesses</h3>
+    <ul>
+      <li><strong>Source availability is uneven.</strong> Some jurisdictions have machine-readable regulatory feeds; many do not.</li>
+      <li><strong>Regulations don't capture everything.</strong> Company-specific terms (equity grants, sign-on bonuses, custom benefits) aren't in any regulator's database. A hybrid layer is required.</li>
+      <li><strong>Rule extraction is its own hard problem.</strong> Real regulations are messy. Turning them into clean rules is months of legal-technical work per country.</li>
+      <li><strong>Failure mode is severe.</strong> If the rule database is wrong, every document generated is wrong simultaneously.</li>
+    </ul>
+
+    <h3>Where this approach fits</h3>
+    <p>The regulation-native approach is the most future-proof of the four paradigms but also the most expensive to build. The most coherent positioning is as a <em>layered citation system</em> rather than a standalone replacement for templates or RAG. Regulatory updates flow through the rule layer regardless of which engine actually generates the document; templates and RAG provide the body, the rule layer provides the citations.</p>
+    <p>A reasonable phased adoption: pilot in one jurisdiction with a strong machine-readable regulatory feed, validate what rule attestation means in practice, and expand based on what is learned.</p>
+  </div>
+</section>
+
+</main>
+
+<script>
+// =============================================================
+// REGULATION SOURCES
+// =============================================================
+const SOURCES = {
+  ES: [
+    {id: 'es-boe', name: 'BOE — Boletín Oficial del Estado', icon: '🏛️', feed: 'https://boe.es/regulatory/v1', freshness: 'fresh', last_sync: '14 minutes ago', authority: 'Statute', covers: ['Estatuto de los Trabajadores', 'LOPDGDD', 'RD-Ley 28/2020']},
+    {id: 'es-cba-tech', name: 'Convenio Colectivo — Sector Tecnológico', icon: '📜', feed: 'manual + ratified', freshness: 'fresh', last_sync: '2 days ago', authority: 'Collective Bargaining', covers: ['Working hours', 'Vacation', 'Compensation structure']},
+    {id: 'es-tax', name: 'Agencia Tributaria', icon: '💰', feed: 'agenciatributaria.es/api', freshness: 'fresh', last_sync: '1 hour ago', authority: 'Tax Authority', covers: ['Withholding rules', 'Compensation reporting']},
+  ],
+  FI: [
+    {id: 'fi-eca', name: 'Finlex — Employment Contracts Act', icon: '🏛️', feed: 'finlex.fi/api/v1', freshness: 'fresh', last_sync: '6 hours ago', authority: 'Statute', covers: ['Probation', 'Notice periods', 'Working hours']},
+    {id: 'fi-cba', name: 'Tietoala — IT Sector CBA', icon: '📜', feed: 'manual + ratified', freshness: 'fresh', last_sync: '5 days ago', authority: 'Collective Bargaining', covers: ['Working hours', 'Holiday pay']},
+    {id: 'fi-tk', name: 'Verohallinto — Tax Administration', icon: '💰', feed: 'vero.fi/api', freshness: 'fresh', last_sync: '12 hours ago', authority: 'Tax Authority', covers: ['Withholding']},
+  ],
+  US: [
+    {id: 'us-flsa', name: 'US Department of Labor — FLSA', icon: '🏛️', feed: 'dol.gov/regulations', freshness: 'fresh', last_sync: '3 hours ago', authority: 'Federal Statute', covers: ['Wage & hour']},
+    {id: 'us-state', name: 'State-specific employment law', icon: '🗽', feed: 'multiple state APIs', freshness: 'fresh', last_sync: '1 hour ago', authority: 'State Statute', covers: ['At-will doctrine', 'Notice', 'Final pay']},
+    {id: 'us-irs', name: 'IRS — Withholding & Reporting', icon: '💰', feed: 'irs.gov/api', freshness: 'fresh', last_sync: '6 hours ago', authority: 'Tax Authority', covers: ['W-2 reporting', 'Withholding']},
+  ],
+  DE: [
+    {id: 'de-bgb', name: 'Bundesgesetzblatt — BGB / KSchG', icon: '🏛️', feed: 'bgbl.de/api', freshness: 'fresh', last_sync: '4 hours ago', authority: 'Statute', covers: ['Notice periods', 'Termination protection']},
+    {id: 'de-cba', name: 'IG Metall — Tarifvertrag', icon: '📜', feed: 'manual + ratified', freshness: 'stale', last_sync: '14 days ago', authority: 'Collective Bargaining', covers: ['Working hours', 'Compensation bands']},
+  ],
+};
+
+// Rules per country/event — these would normally be derived from sources
+const RULES = {
+  ES: {
+    'employee.hired': [
+      {id: 'es-prob', source: 'es-boe', cite: 'Estatuto de los Trabajadores Art. 14', text: 'Probation period: 6 months for indefinite-term contracts.', clause: 'El periodo de prueba será de seis meses, durante el cual cualquiera de las partes puede rescindir el contrato sin previo aviso.'},
+      {id: 'es-hours', source: 'es-cba-tech', cite: 'CCT Sector Tecnológico §12', text: 'Standard working week: 40 hours, distributed per CBA.', clause: 'La jornada laboral será de 40 horas semanales, distribuidas según convenio colectivo aplicable.'},
+      {id: 'es-vac', source: 'es-boe', cite: 'Estatuto de los Trabajadores Art. 38', text: '30 calendar days paid annual vacation.', clause: 'El trabajador tendrá derecho a 30 días naturales de vacaciones anuales retribuidas.'},
+      {id: 'es-comp', source: 'es-boe', cite: 'Estatuto de los Trabajadores Art. 26-29', text: 'Compensation paid in 14 monthly installments (12 + 2 extraordinary).', clause: 'La retribución bruta anual será de {{comp}}, distribuida en 14 pagas mensuales, incluyendo las pagas extraordinarias de junio y diciembre.'},
+      {id: 'es-gdpr', source: 'es-boe', cite: 'LOPDGDD Art. 88', text: 'Data processing notice required.', clause: 'Los datos personales del trabajador serán tratados con la finalidad de mantener la relación laboral, conforme al RGPD y a la LOPDGDD.'},
+    ],
+    'employee.terminated': [
+      {id: 'es-sev', source: 'es-boe', cite: 'Estatuto de los Trabajadores Art. 53', text: 'Severance: 20 days/year for objective dismissal.', clause: 'Conforme al artículo 53 del Estatuto de los Trabajadores, se reconoce una indemnización equivalente a 20 días de salario por año de servicio.'},
+      {id: 'es-notice', source: 'es-boe', cite: 'Estatuto de los Trabajadores Art. 53', text: '15 days written notice required for objective dismissal.', clause: 'Se ha cumplido con el preaviso de 15 días previsto por la legislación vigente.'},
+    ],
+    'employee.compensation_changed': [
+      {id: 'es-comp-change', source: 'es-boe', cite: 'Estatuto de los Trabajadores Art. 41', text: 'Material modification of working conditions requires written notification.', clause: 'Con efecto desde {{date}}, su retribución bruta anual se ajusta a {{comp}}. Las demás condiciones de su contrato laboral permanecen inalteradas.'},
+    ],
+    'annual.compensation_cycle': [
+      {id: 'es-annual', source: 'es-boe', cite: 'Estatuto de los Trabajadores Art. 41', text: 'Annual review notification.', clause: 'Como parte del ciclo de revisión salarial 2026, su retribución se ajusta a {{comp}}, con efecto desde {{date}}.'},
+    ],
+  },
+  FI: {
+    'employee.hired': [
+      {id: 'fi-prob', source: 'fi-eca', cite: 'Employment Contracts Act §1:4', text: 'Probation period: maximum 6 months.', clause: 'The probation period shall be 6 months, in accordance with the Finnish Employment Contracts Act.'},
+      {id: 'fi-hours', source: 'fi-cba', cite: 'Tietoala CBA §6', text: 'Standard working time: 37.5 hours/week.', clause: 'Working hours follow the Tietoala collective bargaining agreement, with standard working time of 37.5 hours per week.'},
+      {id: 'fi-vac', source: 'fi-eca', cite: 'Annual Holidays Act §5', text: '2.5 days vacation per month worked.', clause: 'The employee accrues vacation at 2.5 days per month worked, per the Annual Holidays Act.'},
+      {id: 'fi-notice', source: 'fi-eca', cite: 'Employment Contracts Act §6', text: 'Notice period scales with tenure: 14 days to 6 months.', clause: 'Notice periods follow the Employment Contracts Act, scaling with length of service.'},
+    ],
+    'employee.terminated': [
+      {id: 'fi-sev-notice', source: 'fi-eca', cite: 'Employment Contracts Act §6:3', text: 'Notice required per tenure-based schedule.', clause: 'Notice has been provided per the schedule set forth in the Employment Contracts Act §6:3.'},
+    ],
+    'employee.compensation_changed': [
+      {id: 'fi-comp', source: 'fi-eca', cite: 'Employment Contracts Act §10', text: 'Material change requires written notice.', clause: 'Effective {{date}}, your annualized base salary will be adjusted to {{comp}}. All other terms of your employment remain in full effect.'},
+    ],
+    'annual.compensation_cycle': [
+      {id: 'fi-annual', source: 'fi-eca', cite: 'Employment Contracts Act §10', text: 'Annual review notification.', clause: 'As part of the 2026 annual compensation review, your base salary is adjusted to {{comp}}, effective {{date}}.'},
+    ],
+  },
+  US: {
+    'employee.hired': [
+      {id: 'us-atwill', source: 'us-state', cite: 'State employment law (default)', text: 'At-will employment unless otherwise specified.', clause: 'Your employment is at-will, meaning either you or the Company may terminate the employment relationship at any time, with or without cause.'},
+      {id: 'us-flsa', source: 'us-flsa', cite: 'FLSA exempt classification', text: 'Exempt classification per FLSA.', clause: 'Your position is classified as exempt under the FLSA. You are eligible for company benefits per the standard employee policy.'},
+      {id: 'us-w2', source: 'us-irs', cite: 'IRS W-4 / W-2 reporting', text: 'Tax withholding per employee election.', clause: 'Federal, state, and local taxes will be withheld per your W-4 elections.'},
+    ],
+    'employee.terminated': [
+      {id: 'us-final', source: 'us-state', cite: 'State final-pay statute (varies)', text: 'Final paycheck per state requirements.', clause: 'Your final paycheck will be processed in accordance with applicable state final-pay requirements.'},
+    ],
+    'employee.compensation_changed': [
+      {id: 'us-comp', source: 'us-state', cite: 'No federal requirement; state varies', text: 'Notification practice.', clause: 'Effective {{date}}, your annualized base compensation will be adjusted to {{comp}}. All other terms of your employment remain unchanged.'},
+    ],
+    'annual.compensation_cycle': [
+      {id: 'us-annual', source: 'us-state', cite: 'No federal requirement; state varies', text: 'Annual cycle notification.', clause: 'As part of the 2026 annual compensation cycle, your base compensation is adjusted to {{comp}}, effective {{date}}.'},
+    ],
+  },
+  DE: {
+    'employee.hired': [
+      {id: 'de-prob', source: 'de-bgb', cite: 'BGB §622(3)', text: 'Probation period maximum 6 months with 2-week notice.', clause: 'Die Probezeit beträgt 6 Monate, während derer eine Kündigungsfrist von 2 Wochen gilt.'},
+      {id: 'de-notice', source: 'de-bgb', cite: 'BGB §622(2)', text: 'Tenure-based notice schedule.', clause: 'Nach Ablauf der Probezeit gelten die gesetzlichen Kündigungsfristen gemäß BGB §622(2).'},
+      {id: 'de-hours', source: 'de-cba', cite: 'IG Metall Tarifvertrag', text: 'Working hours per applicable Tarifvertrag.', clause: 'Die Arbeitszeit richtet sich nach dem geltenden Tarifvertrag.'},
+    ],
+    'employee.terminated': [
+      {id: 'de-kschg', source: 'de-bgb', cite: 'KSchG §1', text: 'Termination protection if >6 months tenure & >10 employees.', clause: 'Diese Kündigung erfolgt unter Beachtung der Bestimmungen des Kündigungsschutzgesetzes (KSchG).'},
+    ],
+    'employee.compensation_changed': [
+      {id: 'de-comp', source: 'de-bgb', cite: 'BGB §611', text: 'Material change requires written agreement.', clause: 'Mit Wirkung zum {{date}} wird Ihr Jahresbruttogehalt auf {{comp}} angepasst. Alle übrigen Vertragsbedingungen bleiben unverändert.'},
+    ],
+    'annual.compensation_cycle': [
+      {id: 'de-annual', source: 'de-bgb', cite: 'BGB §611', text: 'Annual cycle change.', clause: 'Im Rahmen der jährlichen Gehaltsüberprüfung 2026 wird Ihr Bruttojahresgehalt auf {{comp}} mit Wirkung zum {{date}} angepasst.'},
+    ],
+  },
+};
+
+// Track regulation change state (for the Spain digital disconnection demo)
+let SPAIN_DIGITAL_DISCONNECTION = false;
+const SPAIN_DD_RULE = {
+  id: 'es-dd',
+  source: 'es-boe',
+  cite: 'RD-Ley 28/2020 (updated 2026)',
+  text: 'Right to digital disconnection outside working hours.',
+  clause: 'El empleado tiene derecho a desconectarse digitalmente fuera del horario laboral. La empresa garantizará el respeto del tiempo de descanso, vacaciones y permisos personales del trabajador.',
+};
+
+// =============================================================
+// GENERATE
+// =============================================================
+function generate() {
+  document.getElementById('reg-fetch-empty').style.display = 'none';
+  const sourcesEl = document.getElementById('sources-list');
+  sourcesEl.style.display = 'block';
+  sourcesEl.innerHTML = '';
+  document.getElementById('reg-doc-output').style.display = 'none';
+  document.getElementById('reg-doc').innerHTML = '';
+  document.getElementById('reg-footnotes').innerHTML = '';
+
+  const country = document.getElementById('emp-country').value;
+  const event = document.getElementById('trigger-select').value;
+  const ctx = {
+    name: document.getElementById('emp-name').value,
+    role: document.getElementById('emp-role').value,
+    start: document.getElementById('emp-start').value,
+    comp: document.getElementById('emp-comp').value,
+    country, event,
+  };
+
+  const sources = SOURCES[country] || [];
+  const rules = (RULES[country] && RULES[country][event]) || [];
+
+  // Optionally append the digital disconnection rule for Spain hires
+  let activeRules = [...rules];
+  if (country === 'ES' && event === 'employee.hired' && SPAIN_DIGITAL_DISCONNECTION) {
+    activeRules.push(SPAIN_DD_RULE);
+  }
+
+  // Animate source connections
+  let sIdx = 0;
+  function connectNext() {
+    if (sIdx >= sources.length) {
+      // Now pull rules
+      pullRules(ctx, activeRules, sources);
+      return;
+    }
+    const s = sources[sIdx];
+    const head = document.createElement('div');
+    head.className = 'source-head';
+    head.id = `src-${s.id}`;
+    head.innerHTML = `
+      <div class="src-pulse"></div>
+      <div>
+        <div class="src-name">${s.icon} ${s.name}</div>
+        <div style="font-size:10px; color:var(--slate)">${s.feed}</div>
+      </div>
+      <div class="src-status">Connecting...</div>
+    `;
+    sourcesEl.appendChild(head);
+    setTimeout(() => head.classList.add('visible'), 30);
+    setTimeout(() => {
+      head.classList.add('connected');
+      head.querySelector('.src-status').innerHTML = '<span class="badge green">Connected · ' + s.last_sync + '</span>';
+      sIdx++;
+      connectNext();
+    }, 500);
+  }
+  setTimeout(connectNext, 200);
+}
+
+function pullRules(ctx, rules, sources) {
+  const sourcesEl = document.getElementById('sources-list');
+  let rIdx = 0;
+  function pullNext() {
+    if (rIdx >= rules.length) {
+      // Render document
+      renderRegDoc(ctx, rules);
+      return;
+    }
+    const r = rules[rIdx];
+    const sourceHead = document.getElementById(`src-${r.source}`);
+    if (sourceHead) {
+      const clauseEl = document.createElement('div');
+      clauseEl.className = 'clause-pulled';
+      clauseEl.innerHTML = `
+        <div class="clause-cite">${r.cite}</div>
+        <div class="clause-text">${r.clause}</div>
+      `;
+      // Append after the source head
+      sourceHead.insertAdjacentElement('afterend', clauseEl);
+      setTimeout(() => clauseEl.classList.add('visible'), 30);
+    }
+    rIdx++;
+    setTimeout(pullNext, 350);
+  }
+  setTimeout(pullNext, 300);
+}
+
+function renderRegDoc(ctx, rules) {
+  const out = document.getElementById('reg-doc-output');
+  out.style.display = 'block';
+  const docEl = document.getElementById('reg-doc');
+  const fn = document.getElementById('reg-footnotes');
+  docEl.innerHTML = '';
+  fn.innerHTML = '';
+
+  const dateLine = new Date().toLocaleDateString('en-US', {year: 'numeric', month: 'long', day: 'numeric'});
+  const lines = [
+    dateLine,
+    '',
+    `${ctx.country === 'ES' ? 'Estimado/a ' : 'Dear '}${ctx.name},`,
+    '',
+  ];
+
+  if (ctx.event === 'employee.hired') {
+    lines.push(`${ctx.country === 'ES' ? 'Nos complace ofrecerte el puesto de' : (ctx.country === 'DE' ? 'Wir freuen uns, Ihnen die Position als' : 'We are pleased to offer you the position of')} ${ctx.role}, ${ctx.country === 'ES' ? 'con fecha de inicio el' : 'starting'} ${ctx.start}.`);
+    lines.push('');
+  } else if (ctx.event === 'employee.terminated') {
+    lines.push(`${ctx.country === 'ES' ? 'Por la presente confirmamos la finalización de su relación laboral, con fecha efectiva' : 'This confirms the conclusion of your employment, effective'} ${ctx.start}.`);
+    lines.push('');
+  } else if (ctx.event === 'employee.compensation_changed' || ctx.event === 'annual.compensation_cycle') {
+    // intro handled by clause
+  }
+
+  rules.forEach((r, idx) => {
+    const filled = r.clause.replace(/\{\{comp\}\}/g, ctx.comp).replace(/\{\{date\}\}/g, ctx.start);
+    lines.push(filled + ` <sup class="cite" title="${r.cite}">[${idx+1}]</sup>`);
+    lines.push('');
+  });
+
+  lines.push(ctx.country === 'ES' ? 'Atentamente,' : (ctx.country === 'DE' ? 'Mit freundlichen Grüßen,' : 'Sincerely,'));
+
+  // Render lines
+  lines.forEach(l => {
+    const ld = document.createElement('div');
+    ld.className = 'reg-doc-line';
+    ld.innerHTML = l.trim() ? l : '&nbsp;';
+    docEl.appendChild(ld);
+  });
+  const lineEls = docEl.querySelectorAll('.reg-doc-line');
+  let i = 0;
+  function show() {
+    if (i >= lineEls.length) {
+      // Render footnotes
+      rules.forEach((r, idx) => {
+        const fnLine = document.createElement('div');
+        fnLine.innerHTML = `<b>[${idx+1}]</b> ${r.cite} — pulled live from ${(SOURCES[ctx.country] || []).find(s => s.id === r.source)?.name || r.source}`;
+        fn.appendChild(fnLine);
+        setTimeout(() => fnLine.classList.add('visible'), 40 + idx * 100);
+      });
+      return;
+    }
+    lineEls[i].classList.add('visible');
+    i++;
+    setTimeout(show, 90);
+  }
+  show();
+}
+
+function resetGen() {
+  document.getElementById('reg-fetch-empty').style.display = 'block';
+  document.getElementById('sources-list').style.display = 'none';
+  document.getElementById('sources-list').innerHTML = '';
+  document.getElementById('reg-doc-output').style.display = 'none';
+}
+
+// =============================================================
+// SOURCES TAB
+// =============================================================
+function renderSources() {
+  const el = document.getElementById('sources-detail');
+  el.innerHTML = '';
+  Object.keys(SOURCES).forEach(country => {
+    const cHead = document.createElement('h3');
+    cHead.textContent = ({ES: 'Spain (ES)', FI: 'Finland (FI)', US: 'United States (US)', DE: 'Germany (DE)'})[country];
+    cHead.style.marginTop = '20px';
+    el.appendChild(cHead);
+    SOURCES[country].forEach(s => {
+      const card = document.createElement('div');
+      card.className = 'source-card';
+      const stale = s.freshness === 'stale';
+      card.innerHTML = `
+        <div class="src-icon">${s.icon}</div>
+        <div class="src-meta">
+          <div><strong>${s.name}</strong> <span class="badge slate">${s.authority}</span></div>
+          <div style="font-size:11px; color:var(--slate); margin-top:4px">Feed: ${s.feed}</div>
+          <div class="freshness ${stale ? 'stale' : ''}" style="margin-top:6px">Last sync: ${s.last_sync} ${stale ? '<span class="badge amber">Stale — escalate</span>' : '<span class="badge green">Fresh</span>'}</div>
+          <div style="font-size:11px; color:var(--slate); margin-top:6px">Covers: ${s.covers.join(' · ')}</div>
+        </div>
+      `;
+      el.appendChild(card);
+    });
+  });
+}
+
+// =============================================================
+// ATTESTATIONS
+// =============================================================
+const ATTESTATIONS = [
+  {country: 'ES', rule: 'Probation period: 6 months for indefinite-term contracts', cite: 'Estatuto de los Trabajadores Art. 14', signed_by: 'M. García, Employment Counsel ES', signed: '2025-09-15', expires: '2026-09-15', status: 'signed'},
+  {country: 'ES', rule: '30 calendar days paid annual vacation', cite: 'Estatuto de los Trabajadores Art. 38', signed_by: 'M. García, Employment Counsel ES', signed: '2025-09-15', expires: '2026-09-15', status: 'signed'},
+  {country: 'ES', rule: 'Right to digital disconnection (RD-Ley 28/2020 update)', cite: 'RD-Ley 28/2020 (updated 2026)', signed_by: '—', signed: '—', expires: '—', status: 'pending', note: 'New regulation effective 1 May 2026 — awaiting Counsel attestation'},
+  {country: 'FI', rule: 'Probation period maximum 6 months', cite: 'Employment Contracts Act §1:4', signed_by: 'L. Niemi, Employment Counsel FI', signed: '2025-11-02', expires: '2026-11-02', status: 'signed'},
+  {country: 'FI', rule: 'Notice period scales with tenure', cite: 'Employment Contracts Act §6', signed_by: 'L. Niemi, Employment Counsel FI', signed: '2025-11-02', expires: '2026-11-02', status: 'signed'},
+  {country: 'US', rule: 'At-will employment default', cite: 'State employment law (default)', signed_by: 'D. Park, Employment Counsel US', signed: '2025-04-12', expires: '2026-04-12', status: 'expired', note: 'Annual re-attestation overdue — block US generations until renewed'},
+  {country: 'DE', rule: 'Tenure-based notice schedule', cite: 'BGB §622(2)', signed_by: 'K. Müller, Employment Counsel DE', signed: '2025-08-20', expires: '2026-08-20', status: 'signed'},
+  {country: 'DE', rule: 'Termination protection (KSchG)', cite: 'KSchG §1', signed_by: 'K. Müller, Employment Counsel DE', signed: '2025-08-20', expires: '2026-08-20', status: 'signed'},
+];
+
+function renderAttestations() {
+  const el = document.getElementById('attestations-list');
+  el.innerHTML = '';
+  ATTESTATIONS.forEach(a => {
+    const card = document.createElement('div');
+    card.className = 'attestation-card ' + a.status;
+    const badge = ({signed: '<span class="badge green">Active</span>', pending: '<span class="badge amber">Pending re-attestation</span>', expired: '<span class="badge red">Expired</span>'})[a.status];
+    card.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:flex-start">
+        <div style="flex:1">
+          <div class="att-rule">${a.country} — ${a.rule}</div>
+          <div class="att-cite">${a.cite}</div>
+        </div>
+        ${badge}
+      </div>
+      <div class="att-meta">Signed by: ${a.signed_by} · Signed: ${a.signed} · Expires: ${a.expires}${a.note ? ' · <em>' + a.note + '</em>' : ''}</div>
+      ${a.status !== 'signed' ? `<div class="att-actions"><button>Open for re-attestation</button><button class="secondary">Review change</button></div>` : ''}
+    `;
+    el.appendChild(card);
+  });
+}
+
+// =============================================================
+// REGULATION CHANGE DEMO
+// =============================================================
+function simulateChange() {
+  SPAIN_DIGITAL_DISCONNECTION = true;
+  // Add a pending attestation if not already there
+  const existing = ATTESTATIONS.find(a => a.country === 'ES' && a.rule.includes('digital disconnection'));
+  if (!existing || existing.status !== 'pending') {
+    // Reset to pending
+    if (existing) existing.status = 'pending';
+  }
+  const log = document.getElementById('change-log');
+  log.innerHTML = '';
+  const steps = [
+    '▶ <strong>BOE feed</strong> reports change in RD-Ley 28/2020 effective 1 May 2026',
+    '▶ Rule extraction: identified <strong>1 new mandatory provision</strong> for indefinite-term contracts',
+    '▶ Affected jurisdictions: <strong>Spain</strong>',
+    '▶ Affected document classes: <strong>Employee hire (new EAs), Annual cycle (existing employees)</strong>',
+    '▶ <span style="color:var(--amber)">⚡ Routed to Counsel queue for re-attestation — blocking ES new-hire generation until signed</span>',
+    '▶ Estimated lawyer time: <strong>15 minutes</strong> (review one rule + sign)',
+    '▶ Once attested: rule becomes active in next generation for <strong>ALL future Spain EAs and annual cycle docs</strong>',
+    '<span style="color:var(--green)">✓ No template edits. No corpus updates. No deploys. One rule, one signature, ripples globally.</span>',
+  ];
+  let i = 0;
+  function show() {
+    if (i >= steps.length) {
+      // Render diff
+      renderDiff();
+      return;
+    }
+    const div = document.createElement('div');
+    div.style.padding = '4px 0';
+    div.innerHTML = steps[i];
+    log.appendChild(div);
+    i++;
+    setTimeout(show, 380);
+  }
+  show();
+  // Also flip the attestation card visually
+  renderAttestations();
+}
+
+function renderDiff() {
+  const el = document.getElementById('change-diff');
+  const before = [
+    'Estimada María López,',
+    '',
+    'Nos complace ofrecerte el puesto de Senior Engineer, con fecha de inicio el 2026-06-01.',
+    'El periodo de prueba será de seis meses... [1]',
+    'La jornada laboral será de 40 horas semanales... [2]',
+    'Tendrás derecho a 30 días naturales de vacaciones... [3]',
+    'La retribución bruta anual será de €85,000... [4]',
+    'Los datos personales del trabajador serán tratados conforme al RGPD... [5]',
+    'Atentamente,',
+  ];
+  const newClause = 'El empleado tiene derecho a desconectarse digitalmente fuera del horario laboral... [6]';
+
+  el.innerHTML = `
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px">
+      <div>
+        <h4 style="color:var(--slate)">Before regulation change</h4>
+        <div style="background:white; border:1px solid var(--border); padding:14px; border-radius:6px; font-family:Georgia,serif; font-style:normal; color:#1e293b">
+          ${before.map(l => `<div>${l || '&nbsp;'}</div>`).join('')}
+        </div>
+      </div>
+      <div>
+        <h4 style="color:var(--green)">After regulation change</h4>
+        <div style="background:white; border:1px solid var(--green); padding:14px; border-radius:6px; font-family:Georgia,serif; font-style:normal; color:#1e293b">
+          ${before.slice(0, -1).map(l => `<div>${l || '&nbsp;'}</div>`).join('')}
+          <div style="background:var(--green-bg); padding:4px 6px; border-radius:3px; margin:4px -6px;">${newClause}</div>
+          <div>${before[before.length-1]}</div>
+        </div>
+        <div style="margin-top:10px; font-size:11px; color:var(--green)"><strong>+1 line, citation [6]:</strong> RD-Ley 28/2020 (updated 2026)</div>
+      </div>
+    </div>
+  `;
+}
+
+function revertChange() {
+  SPAIN_DIGITAL_DISCONNECTION = false;
+  document.getElementById('change-log').innerHTML = '';
+  document.getElementById('change-diff').innerHTML = '<em>Apply the regulation change above to see the diff.</em>';
+}
+
+// =============================================================
+// INIT
+// =============================================================
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('panel-' + t.dataset.tab).classList.add('active');
+  });
+});
+renderSources();
+renderAttestations();
+</script>
+
+</body>
+</html>
