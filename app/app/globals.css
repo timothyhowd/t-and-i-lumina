@@ -1,0 +1,88 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ───────────────────────────────────────────────────────────────────
+   Design tokens — inherited from demo/lumina.html. The cool slate
+   palette + soft shadows + warm orange accent is the look.
+   ───────────────────────────────────────────────────────────────── */
+:root {
+  --ink: #0f172a;
+  --ink-2: #334155;
+  --muted: #64748b;
+  --line: #e2e8f0;
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --accent: #ea580c;
+  --accent-soft: #fff7ed;
+  --accent-ring: #fed7aa;
+  --good: #16a34a;
+  --good-soft: #f0fdf4;
+  --warn: #d97706;
+  --warn-soft: #fffbeb;
+  --stop: #dc2626;
+  --stop-soft: #fef2f2;
+  --brand-dd: #EB1700;
+  --brand-wolt: #009DE0;
+  --brand-roo: #00CCBC;
+
+  --shadow-1: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-2: 0 4px 12px rgba(15, 23, 42, 0.06);
+  --shadow-3: 0 8px 32px rgba(15, 23, 42, 0.08);
+
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    'Inter',
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ───────────────────────────────────────────────────────────────────
+   The "lumen" — small orange dot used as the Lumina avatar/mark.
+   ───────────────────────────────────────────────────────────────── */
+.lumen {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background: linear-gradient(135deg, var(--accent), #fb923c);
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px var(--accent-soft);
+  vertical-align: 1px;
+  margin-right: 8px;
+}
+
+.lumen-lg {
+  width: 12px;
+  height: 12px;
+  box-shadow: 0 0 0 6px var(--accent-soft);
+}
+
+/* Document watermark stripe — top of every generated draft. */
+.draft-watermark-stripe {
+  background:
+    repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 8px,
+      rgba(255, 255, 255, 0.05) 8px,
+      rgba(255, 255, 255, 0.05) 16px
+    ),
+    var(--stop);
+}

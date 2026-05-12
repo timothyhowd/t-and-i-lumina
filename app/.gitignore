@@ -1,0 +1,21 @@
+# Next.js
+/node_modules
+/.next
+/out
+/build
+.DS_Store
+
+# Env (never commit secrets)
+.env.local
+.env*.local
+
+# Generated artifacts — provenance log + any draft outputs
+data/generations.jsonl
+data/outputs/
+
+# Vercel
+.vercel
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts

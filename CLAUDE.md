@@ -32,7 +32,7 @@ Migrating the standalone HTML prototype into a Next.js + TypeScript + Tailwind a
 ### Stack (planned)
 
 - **Frontend + Backend:** Next.js 15 (app router), TypeScript, Tailwind CSS
-- **LLM:** Anthropic API via `@anthropic-ai/sdk`, server-side only (API key never reaches the browser)
+- **LLM:** Claude via DoorDash's internal Portkey gateway (`cybertron-service-gateway.doordash.team`), OpenAI-compatible interface. Routed through the `openai` SDK with a custom `baseURL`. Server-side only. (Changed 2026-05-12 from direct `@anthropic-ai/sdk` — corp policy mandates the Portkey gateway. Trade-off: prompt caching + adaptive thinking + effort param are not available through this path.)
 - **Models:** Claude Opus 4.7 for generation; Claude Haiku 4.5 for cheap classification / routing
 - **Corpus:** File-based for PoC. Markdown extracts from the historical templates in the policy Drive, indexed in-memory. Future: proper vector store.
 - **State:** In-memory + URL state for PoC. No database until needed.
@@ -50,25 +50,36 @@ Migrating the standalone HTML prototype into a Next.js + TypeScript + Tailwind a
 - **Humans always in the loop.** Lumina drafts; specialists sign off. No autonomous finalization.
 - **Brand switching is structural** (logo, entity, address); jurisdictional content routes through the regulation/template layer.
 - **No invented citations.** Every regulation reference must trace to a real source. If we don't have it, we say so.
+- **Three-agent architecture** (2026-05-11). See `docs/agent-architecture.md`. Agent 1: Template Management (regulation watch + versioned library). Agent 2: Data Collection (slot fulfillment from connected systems). Agent 3: Generate Documents (conversational surface + orchestration + provenance recording).
+- **Slot schemas committed, legal prose not** (2026-05-11). Per `docs/POC-LIMITATIONS.md` option (ii). Slot schemas live in `corpus/templates/`; real `.docx` and extracted text live in `corpus/raw/` and `corpus/extracts/` and are `.gitignore`d. No clause text or regulation citation enters the repo until counsel verifies.
+- **Multi-country breadth over single-country depth** (2026-05-11). Demo value is cross-country switching, not single-country accuracy. Overrides the earlier "FIN only" recommendation.
 
 ---
+
+## ⚠️ Setup status — read this first if you're a new session
+
+The app is fully built and runs end-to-end against a **mock LLM**. Real Claude calls are gated on completing DoorDash's internal Portkey onboarding (team membership in Employee Directory → workspace join in ML Workbench → accept Portkey invite → copy API key + model slugs).
+
+**See [`docs/PORTKEY-ONBOARDING.md`](./docs/PORTKEY-ONBOARDING.md) for the exact status, what's pending, and the resume-from-here steps.** Do not skip that doc — it has every URL, every channel, every env-var name you'll need.
 
 ## Open questions
 
 > 🔍 **REVIEW:** Add to this list, close items as decisions land. New sessions will read these and not relitigate.
 
-- Which countries are in scope for the PoC? FIN is most complete; US + UK round out the three brands. Recommend starting with FIN only and adding US once accuracy is proven.
+- ~~Which countries are in scope for the PoC?~~ **Decided (2026-05-11):** multi-country breadth, not FIN-only depth. Target one country per brand (FIN/Wolt, USA/DoorDash, UK/Deliveroo) plus one for legal-variance (Brazil chosen). PoC value is demo-able cross-country switching, not single-country accuracy.
+- ~~Data gap blocker (2026-05-11)~~ **Corrected (2026-05-12):** Drive has 521 files across 36 countries, not FIN-only. Earlier spot-checks were misleading — they looked inside `Employment Agreements > High/Low Volume hires` subfolders; the bulk of content lives at the *direct* doc-type level. See `corpus/inventory-summary.md`. 15+ countries have employment agreements; many more have terminations, addendums, warning letters, etc. **Real gap:** UK has 2 files only (no employment agreements); Brazil has 1 loose file. Deliveroo/UK Employment Agreement demo path needs separate sourcing.
+- **Consulting-firm outputs unavailable:** `Z - EY` folder in the Drive is empty. No consulting-firm outputs to benchmark against. Per user (2026-05-12), de-prioritized as a deliverable in favor of "ingest what we have, surface gaps as a feature."
+- **As-is process documentation unavailable:** `Z - As-is process documentation` folder is empty. No process docs explaining the current manual workflow.
 - How do we evaluate "accuracy" for the side-by-side compare with the consulting firm? Need an explicit rubric in `docs/accuracy-rubric.md` before the compare runs.
 - Where does the corpus live during PoC? File-based seems right; vector store later. Open: do we extract once into Markdown, or read .docx files at runtime?
 - Hosting destination for the PoC demo — internal or Vercel?
-- Side-by-side compare: do we have the consulting firm's outputs in hand yet, or are we generating in parallel?
 
 ---
 
 ## Conventions
 
 ### Visual & brand
-- **Brand colors:** DoorDash #EB1700, Wolt #00C2E8, Deliveroo #00CCBC. Used only on letterhead / branded surfaces.
+- **Brand colors:** DoorDash #EB1700, Wolt #009DE0, Deliveroo #00CCBC. Used only on letterhead / branded surfaces. (Wolt's official accent blue is `#009DE0` per design.wolt.com / Mobbin / ColorFYI — corrected from earlier `#00C2E8`.)
 - **Letterheads:** always include real legal entity name + business ID + registered address. These live in a single config — never hardcode.
 
 ### Content & language

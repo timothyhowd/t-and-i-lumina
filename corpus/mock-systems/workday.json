@@ -1,0 +1,228 @@
+{
+  "_meta": {
+    "_note": "Fixture shaped like Workday WQL responses. Field shapes are best-effort approximations; verify when real API access lands. All personas are fictitious — see personas.md.",
+    "shape_version": "poc-v0.1",
+    "source_api": "Workday WQL / Reports-as-a-Service"
+  },
+  "workers": [
+    {
+      "worker_id": "wkr_001",
+      "external_candidate_ref": "cand_001",
+      "personal": {
+        "full_legal_name": "Test Tester",
+        "preferred_name": "Test"
+      },
+      "position": {
+        "id": "pos_grocery_assoc_hel_01",
+        "title": "Grocery Associate",
+        "role_tier": "operational",
+        "manager_id": "wkr_mgr_001"
+      },
+      "employment": {
+        "hire_date": "2026-06-01",
+        "term_type": "indefinite",
+        "end_date": null,
+        "trial_period_months": 6
+      },
+      "location": {
+        "primary": "Helsinki",
+        "type": "city_enum"
+      },
+      "compensation": {
+        "structure": "hourly_paygrade",
+        "pay_grade": "B2",
+        "base_pay": null,
+        "hourly_rate": { "amount": 14.50, "currency": "EUR" },
+        "monthly_eur": null
+      },
+      "legal_entity": {
+        "id": "wolt_services_oy",
+        "legal_name": "Wolt Services Oy",
+        "business_id": "3126563-4",
+        "registered_address": "Pohjoinen Rautatiekatu 21, 00100 Helsinki, Finland"
+      },
+      "schedule": {
+        "weekly_hours_avg": 37.5,
+        "schedule_type": "standard"
+      }
+    },
+    {
+      "worker_id": "wkr_002",
+      "external_candidate_ref": "cand_002",
+      "personal": {
+        "full_legal_name": "Sample Employee A",
+        "preferred_name": "Sample"
+      },
+      "position": {
+        "id": "pos_store_mgr_hel_01",
+        "title": "Store Manager",
+        "role_tier": "supervisor",
+        "manager_id": "wkr_mgr_002"
+      },
+      "employment": {
+        "hire_date": "2026-07-15",
+        "term_type": "indefinite",
+        "end_date": null,
+        "trial_period_months": 6
+      },
+      "location": {
+        "primary": "Helsinki metropolitan area",
+        "type": "metropolitan_area"
+      },
+      "compensation": {
+        "structure": "monthly_fixed",
+        "pay_grade": null,
+        "base_pay": { "amount": 4200, "currency": "EUR", "frequency": "monthly" },
+        "hourly_rate": null,
+        "monthly_eur": 4200
+      },
+      "legal_entity": {
+        "id": "wolt_services_oy",
+        "legal_name": "Wolt Services Oy",
+        "business_id": "3126563-4",
+        "registered_address": "Pohjoinen Rautatiekatu 21, 00100 Helsinki, Finland"
+      },
+      "schedule": {
+        "weekly_hours_avg": 37.5,
+        "schedule_type": "standard"
+      }
+    },
+    {
+      "worker_id": "wkr_003",
+      "external_candidate_ref": "cand_003",
+      "personal": {
+        "full_legal_name": "Demo Persona 1",
+        "preferred_name": "Demo"
+      },
+      "position": {
+        "id": "pos_grocery_assoc_tre_01",
+        "title": "Grocery Associate",
+        "role_tier": "operational",
+        "manager_id": "wkr_mgr_003"
+      },
+      "employment": {
+        "hire_date": "2026-08-01",
+        "term_type": "fixed_term",
+        "end_date": "2026-12-31",
+        "trial_period_months": 2
+      },
+      "location": {
+        "primary": "Tampere",
+        "type": "city_enum"
+      },
+      "compensation": {
+        "structure": "hourly_paygrade",
+        "pay_grade": "B2",
+        "base_pay": null,
+        "hourly_rate": { "amount": 14.50, "currency": "EUR" },
+        "monthly_eur": null
+      },
+      "legal_entity": {
+        "id": "wolt_services_oy",
+        "legal_name": "Wolt Services Oy",
+        "business_id": "3126563-4",
+        "registered_address": "Pohjoinen Rautatiekatu 21, 00100 Helsinki, Finland"
+      },
+      "schedule": {
+        "weekly_hours_avg": 37.5,
+        "schedule_type": "standard"
+      }
+    },
+    {
+      "worker_id": "wkr_004",
+      "external_candidate_ref": "cand_004",
+      "personal": {
+        "full_legal_name": "Sample Employee B",
+        "preferred_name": "Sample"
+      },
+      "position": {
+        "id": "pos_support_lead_hel_01",
+        "title": "Customer Support Lead",
+        "role_tier": "supervisor",
+        "manager_id": "wkr_mgr_004"
+      },
+      "employment": {
+        "hire_date": "2026-09-15",
+        "term_type": "indefinite",
+        "end_date": null,
+        "trial_period_months": 6
+      },
+      "location": {
+        "primary": "Helsinki",
+        "type": "city_enum"
+      },
+      "compensation": {
+        "structure": "monthly_fixed",
+        "pay_grade": null,
+        "base_pay": { "amount": 3800, "currency": "EUR", "frequency": "monthly" },
+        "hourly_rate": null,
+        "monthly_eur": 3800
+      },
+      "legal_entity": {
+        "id": "wolt_oy",
+        "legal_name": "Wolt Oy",
+        "business_id": "2646674-9",
+        "registered_address": "Pohjoinen Rautatiekatu 21, 00100 Helsinki, Finland"
+      },
+      "schedule": {
+        "weekly_hours_avg": 37.5,
+        "schedule_type": "shiftwork_excl_night",
+        "weekend_premium_percent": 8
+      }
+    }
+  ],
+  "legal_entities": [
+    {
+      "id": "wolt_oy",
+      "brand": "wolt",
+      "country": "FIN",
+      "legal_name": "Wolt Oy",
+      "business_id": "2646674-9",
+      "registered_address": "Pohjoinen Rautatiekatu 21, 00100 Helsinki, Finland"
+    },
+    {
+      "id": "wolt_services_oy",
+      "brand": "wolt",
+      "country": "FIN",
+      "legal_name": "Wolt Services Oy",
+      "business_id": "3126563-4",
+      "registered_address": "Pohjoinen Rautatiekatu 21, 00100 Helsinki, Finland"
+    },
+    {
+      "id": "wolt_license_services_oy",
+      "brand": "wolt",
+      "country": "FIN",
+      "legal_name": "Wolt License Services Oy",
+      "business_id": null,
+      "registered_address": "Pohjoinen Rautatiekatu 21, 00100 Helsinki, Finland",
+      "_note": "business_id not yet captured from source templates; specialist must verify"
+    },
+    {
+      "id": "wolt_financial_solutions_oy",
+      "brand": "wolt",
+      "country": "FIN",
+      "legal_name": "Wolt Financial Solutions Oy",
+      "business_id": null,
+      "registered_address": "Pohjoinen Rautatiekatu 21, 00100 Helsinki, Finland",
+      "_note": "business_id not yet captured from source templates; specialist must verify"
+    },
+    {
+      "id": "wolt_finland_247_operations",
+      "brand": "wolt",
+      "country": "FIN",
+      "legal_name": "Wolt Finland 247 Operations Oy",
+      "business_id": null,
+      "registered_address": null,
+      "_note": "Entity referenced in source corpus but full details not extracted yet; specialist must verify"
+    },
+    {
+      "id": "wolt_enterprises_oy",
+      "brand": "wolt",
+      "country": "FIN",
+      "legal_name": "Wolt Enterprises Oy",
+      "business_id": null,
+      "registered_address": "Arkadiankatu 6, 00100 Helsinki, Finland",
+      "_note": "Listed in v1 prototype; not seen in recent template extractions; verify"
+    }
+  ]
+}

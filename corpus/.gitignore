@@ -1,0 +1,5 @@
+# Raw .docx templates and extracted text contain real legal prose.
+# Per POC-LIMITATIONS.md option (ii), do not commit these.
+# Only the slot schemas in corpus/templates/ are committed.
+raw/
+extracts/

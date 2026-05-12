@@ -1,0 +1,346 @@
+{
+  "$schemaVersion": "lumina-v0.1",
+  "templateId": "fin.wolt.employment_agreement",
+  "version": "0.1.0-draft",
+  "status": "draft-poc-unverified",
+  "warning": "POC scaffolding. No legal verification. Do not use for execution. See docs/POC-LIMITATIONS.md.",
+
+  "selectors": {
+    "country": "FIN",
+    "brand": "wolt",
+    "docType": "employment_agreement"
+  },
+
+  "routingAxes": [
+    {
+      "key": "legalEntity",
+      "type": "enum",
+      "values": [
+        "wolt_oy",
+        "wolt_services_oy",
+        "wolt_license_services_oy",
+        "wolt_financial_solutions_oy",
+        "wolt_finland_247_operations",
+        "wolt_enterprises_oy"
+      ],
+      "required": true,
+      "sourceHint": "specialist",
+      "askPrompt": "Which Finnish Wolt legal entity is the employer?",
+      "description": "Selects the registered legal-entity boilerplate (name, business ID, registered address)."
+    },
+    {
+      "key": "termType",
+      "type": "enum",
+      "values": ["indefinite", "fixed_term", "fixed_term_to_permanent"],
+      "required": true,
+      "sourceHint": "specialist",
+      "askPrompt": "Indefinite, fixed-term, or fixed-term-to-permanent conversion?",
+      "description": "Determines term clause shape and trial-period max."
+    },
+    {
+      "key": "roleTier",
+      "type": "enum",
+      "values": ["operational", "supervisor", "specialist"],
+      "required": true,
+      "sourceHint": "derived",
+      "askPrompt": "What tier does this role belong to?",
+      "description": "Tier controls whether IP / Confidentiality / Non-compete / Non-solicit / Liquidated-damages clause group applies. Operational roles (e.g. Grocery Associate) historically omit these; supervisor and specialist roles include them."
+    },
+    {
+      "key": "scheduleType",
+      "type": "enum",
+      "values": ["standard", "shiftwork_excl_night", "shiftwork_with_night", "on_call", "part_time"],
+      "required": true,
+      "sourceHint": "specialist",
+      "askPrompt": "What schedule type applies?",
+      "description": "Controls working-hours clause shape and weekend/night premium clauses."
+    },
+    {
+      "key": "compensationStructure",
+      "type": "enum",
+      "values": ["hourly_paygrade", "monthly_fixed"],
+      "required": true,
+      "sourceHint": "derived",
+      "askPrompt": "Hourly pay-scale or fixed monthly salary?",
+      "description": "Operational roles historically use hourly pay-grade (e.g. B2 scale); supervisor/specialist use fixed monthly EUR."
+    }
+  ],
+
+  "slots": [
+    {
+      "key": "employee.full_name",
+      "type": "string",
+      "required": true,
+      "sourceHint": "greenhouse",
+      "askPrompt": "Employee's full legal name?",
+      "intentNote": "Identifies the employee party to the agreement."
+    },
+    {
+      "key": "employee.personal_id_code",
+      "type": "string",
+      "required": true,
+      "sensitive": true,
+      "sourceHint": "specialist",
+      "askPrompt": "Employee's Finnish personal identity code (henkilötunnus)?",
+      "intentNote": "Statutorily required identifier for the employee party. Sensitive — never auto-fetched.",
+      "validation": { "pattern": "^[0-9]{6}[-+A][0-9]{3}[0-9A-Z]$" }
+    },
+    {
+      "key": "employee.date_of_birth",
+      "type": "date",
+      "required": false,
+      "requiredIf": { "roleTier": "operational" },
+      "sourceHint": "specialist",
+      "askPrompt": "Employee's date of birth (DD.MM.YYYY)?",
+      "intentNote": "Some FIN templates list DOB alongside address as identifying info. Convention varies by template."
+    },
+    {
+      "key": "employee.address",
+      "type": "address",
+      "required": true,
+      "sensitive": true,
+      "sourceHint": "specialist",
+      "askPrompt": "Employee's home address?",
+      "intentNote": "Identifying info for the employee party; treated as sensitive PII."
+    },
+    {
+      "key": "employment.start_date",
+      "type": "date",
+      "required": true,
+      "sourceHint": "workday",
+      "askPrompt": "Employment start date?",
+      "intentNote": "Commencement date of the employment relationship."
+    },
+    {
+      "key": "employment.fixed_term_end_date",
+      "type": "date",
+      "required": false,
+      "requiredIf": { "termType": "fixed_term" },
+      "sourceHint": "specialist",
+      "askPrompt": "When does the fixed-term contract end?",
+      "intentNote": "Required only for fixed-term contracts."
+    },
+    {
+      "key": "employment.fixed_term_reason",
+      "type": "text",
+      "required": false,
+      "requiredIf": { "termType": "fixed_term" },
+      "sourceHint": "specialist",
+      "askPrompt": "Justified grounds for the fixed-term contract?",
+      "intentNote": "Fixed-term contracts in FIN require a documented grounds. Common observed examples include project-based work, seasonal peak, substitution, internship."
+    },
+    {
+      "key": "employment.prior_relationship_start_date",
+      "type": "date",
+      "required": false,
+      "sourceHint": "workday",
+      "askPrompt": "If a permanent internal hire, when did the prior employment relationship start?",
+      "intentNote": "Used in the 'permanent internal hire' conditional path; affects annual-leave accrual continuity."
+    },
+    {
+      "key": "trial_period.months",
+      "type": "number",
+      "required": false,
+      "default": 6,
+      "sourceHint": "specialist",
+      "askPrompt": "Trial period length (months)?",
+      "intentNote": "Trial period max varies by term type — fixed-term contracts cannot exceed half the term.",
+      "validation": { "max": 6, "min": 0, "unit": "months" }
+    },
+    {
+      "key": "working_place",
+      "type": "string",
+      "required": true,
+      "sourceHint": "specialist",
+      "askPrompt": "Where will they primarily work? (city, metropolitan area, or specific office)",
+      "intentNote": "Free-form work location. Some FIN templates enumerate cities (Helsinki/Tampere/Oulu/Turku); others use a metropolitan area; supervisor templates often specify Helsinki metropolitan area. The downstream renderer classifies the value as needed."
+    },
+    {
+      "key": "working_hours.average_weekly",
+      "type": "number",
+      "required": true,
+      "default": 37.5,
+      "sourceHint": "derived",
+      "askPrompt": "Average weekly working hours?",
+      "intentNote": "Finnish standard full-time is 37.5h/week.",
+      "validation": { "max": 40, "min": 0, "unit": "hours" }
+    },
+    {
+      "key": "schedule.weekend_premium_percent",
+      "type": "number",
+      "required": false,
+      "requiredIf": { "scheduleType": "shiftwork_excl_night" },
+      "default": 8,
+      "sourceHint": "derived",
+      "askPrompt": "Weekend premium (% of base salary per shift)?",
+      "intentNote": "Observed in shiftwork templates as 8% per weekend shift, subject to statutory Sunday-work minimums."
+    },
+    {
+      "key": "role.title",
+      "type": "string",
+      "required": true,
+      "sourceHint": "greenhouse",
+      "askPrompt": "Position title?",
+      "intentNote": "The Employee's job title at the start of employment."
+    },
+    {
+      "key": "role.duties_description",
+      "type": "text",
+      "required": false,
+      "requiredIf": { "roleTier": "operational" },
+      "sourceHint": "specialist",
+      "askPrompt": "Specific duties (for operational roles, a short bullet list)?",
+      "intentNote": "Operational templates enumerate concrete duties (taking orders, packing, inventory, etc.); supervisor/specialist templates use generic 'all duties of the position'."
+    },
+    {
+      "key": "compensation.hourly_pay_grade",
+      "type": "string",
+      "required": false,
+      "requiredIf": { "compensationStructure": "hourly_paygrade" },
+      "sourceHint": "workday",
+      "askPrompt": "Pay grade (e.g. B2)?",
+      "intentNote": "Operational roles use a CBA pay-grade reference."
+    },
+    {
+      "key": "compensation.hourly_rate_eur",
+      "type": "currency",
+      "required": false,
+      "requiredIf": { "compensationStructure": "hourly_paygrade" },
+      "sourceHint": "workday",
+      "askPrompt": "Hourly rate at signing (EUR)?",
+      "intentNote": "Embedded in operational templates alongside the pay-grade reference.",
+      "validation": { "currency": "EUR" }
+    },
+    {
+      "key": "compensation.monthly_eur",
+      "type": "currency",
+      "required": false,
+      "requiredIf": { "compensationStructure": "monthly_fixed" },
+      "sourceHint": "workday",
+      "askPrompt": "Fixed monthly salary (EUR)?",
+      "intentNote": "Supervisor/specialist templates state a fixed monthly EUR figure.",
+      "validation": { "currency": "EUR" }
+    },
+    {
+      "key": "annual_leave.additional_days",
+      "type": "number",
+      "required": false,
+      "default": 0,
+      "sourceHint": "specialist",
+      "askPrompt": "Additional paid days off beyond statutory minimum?",
+      "intentNote": "Some templates grant additional leave days above the Annual Holidays Act baseline."
+    },
+    {
+      "key": "collective_agreement.name",
+      "type": "string",
+      "required": true,
+      "sourceHint": "derived",
+      "askPrompt": "Which collective agreement applies?",
+      "intentNote": "Observed: 'Commercial sector's collective agreement (warehouse workers)' for Grocery Associate; 'Warehouse and Transportation Supervisors' for Store Manager. Should be derived from role + entity."
+    },
+    {
+      "key": "non_solicit.months",
+      "type": "number",
+      "required": false,
+      "default": 6,
+      "requiredIf": { "roleTier": "supervisor" },
+      "sourceHint": "derived",
+      "askPrompt": "Non-solicitation period (months post-termination)?",
+      "intentNote": "Only applies when senior_protections clause group is active."
+    },
+    {
+      "key": "liquidated_damages.months_salary",
+      "type": "number",
+      "required": false,
+      "default": 6,
+      "requiredIf": { "roleTier": "supervisor" },
+      "sourceHint": "derived",
+      "askPrompt": "Liquidated damages multiplier (months of salary)?",
+      "intentNote": "Only applies when senior_protections clause group is active."
+    }
+  ],
+
+  "baselineSections": [
+    { "id": "parties", "intentNote": "Identifies employer and employee as parties." },
+    { "id": "term", "intentNote": "Defines duration and validity of the employment relationship." },
+    { "id": "trial_period", "intentNote": "Trial-period terms." },
+    { "id": "working_place", "intentNote": "Primary work location." },
+    { "id": "working_hours", "intentNote": "Hours of work and overtime/weekend terms." },
+    { "id": "duties", "intentNote": "Position and scope of duties." },
+    { "id": "remuneration", "intentNote": "Salary structure and payment terms." },
+    { "id": "annual_holiday", "intentNote": "Annual leave entitlement." },
+    { "id": "collective_agreement", "intentNote": "Applicable CBA reference." },
+    { "id": "period_of_notice", "intentNote": "Notice period on termination." },
+    { "id": "signatures", "intentNote": "Place, date, and signature lines." }
+  ],
+
+  "clauseGroups": [
+    {
+      "id": "right_to_work",
+      "appliesWhen": { "in": ["roleTier", ["supervisor", "specialist"]] },
+      "description": "Right-to-work warranty and consequences if entitlement lapses.",
+      "clauseIntents": [
+        "Employee warrants entitlement to work in Finland",
+        "Employee shall provide evidence on Company request",
+        "Postponement of start if right-to-work missing",
+        "Termination grounds if right-to-work is lost during employment"
+      ]
+    },
+    {
+      "id": "senior_protections",
+      "appliesWhen": { "in": ["roleTier", ["supervisor", "specialist"]] },
+      "description": "Clause bundle that historically applies to non-operational roles only.",
+      "clauseIntents": [
+        "Intellectual Property assignment to Company",
+        "Confidentiality and trade-secret protection",
+        "Access-to-email consent for Company",
+        "Non-competition during employment (refers Employment Contracts Act Chapter 3 Section 3)",
+        "Non-solicitation of personnel and clients for 6 months post-termination",
+        "Liquidated damages of 6 months' salary for breach of the above",
+        "Governing law (Finland) and jurisdiction (District Court of Helsinki)"
+      ]
+    },
+    {
+      "id": "shiftwork_premiums",
+      "appliesWhen": { "in": ["scheduleType", ["shiftwork_excl_night", "shiftwork_with_night"]] },
+      "description": "Premium-pay and rest-time provisions for shiftwork.",
+      "clauseIntents": [
+        "Shifts arranged across the week, subject to operating hours",
+        "Sunday and public-holiday work consent",
+        "Weekend premium (default 8% per shift, subject to statutory minimums)",
+        "Overtime agreed in advance in writing",
+        "Statutory rest-time and break entitlement"
+      ]
+    },
+    {
+      "id": "fixed_term_extras",
+      "appliesWhen": { "eq": ["termType", "fixed_term"] },
+      "description": "Additional terms only present in fixed-term contracts.",
+      "clauseIntents": [
+        "Fixed-term end date and documented grounds",
+        "Trial-period max may not exceed half the term"
+      ]
+    },
+    {
+      "id": "permanent_internal_hire",
+      "appliesWhen": { "eq": ["termType", "fixed_term_to_permanent"] },
+      "description": "Conversion of a prior fixed-term relationship into a permanent one.",
+      "clauseIntents": [
+        "Acknowledges supersession of prior agreement",
+        "Acknowledges prior employment commencement date for annual-leave continuity"
+      ]
+    }
+  ],
+
+  "derivation": {
+    "sourcedFrom": [
+      "Finland > Employment Agreements > High Volume hires > Template - FIN WM GA Employment Agreement (permanent).docx",
+      "Finland > Employment Agreements > High Volume hires > Template - FIN WM GA Employment Agreement (fixed-term).docx",
+      "Finland > Employment Agreements > Low Volume hires > Template - FIN WM GA Employment Agreement (permanent).docx (duplicate)",
+      "Finland > Employment Agreements > Low Volume hires > Template - FIN WM Store Manager CBA edition_Wolt Services Oy monthly paid.docx",
+      "Finland > Employment Agreements > Low Volume hires > Template - Employment Agreement Full-Time Monthly Support (shiftwork excluding nightwork, adjustment period in use, 8% weekend bonus) Wolt Oy.docx"
+    ],
+    "derivedAt": "2026-05-11",
+    "derivedBy": "lumina-poc-extraction-v0.1"
+  }
+}

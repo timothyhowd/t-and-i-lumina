@@ -1,0 +1,165 @@
+{
+  "_meta": {
+    "_note": "Fixture shaped like Greenhouse API responses. Field shapes are best-effort approximations; verify when real API access lands. All personas are fictitious — see personas.md.",
+    "shape_version": "poc-v0.1",
+    "source_api": "https://developers.greenhouse.io/harvest.html"
+  },
+  "candidates": [
+    {
+      "id": "cand_001",
+      "first_name": "Test",
+      "last_name": "Tester",
+      "company": null,
+      "title": null,
+      "is_private": false,
+      "phone_numbers": [
+        { "value": "+358 40 000 0001", "type": "mobile" }
+      ],
+      "addresses": [],
+      "email_addresses": [
+        { "value": "test.tester@example.invalid", "type": "personal" }
+      ],
+      "applications": [
+        {
+          "id": "app_001",
+          "candidate_id": "cand_001",
+          "status": "active",
+          "applied_at": "2026-04-12T10:30:00Z",
+          "jobs": [{ "id": "job_grocery_assoc_fin", "name": "Grocery Associate" }],
+          "office": { "id": "office_helsinki", "name": "Helsinki", "location": { "name": "Helsinki, Finland" } },
+          "offers": [
+            {
+              "id": "offer_001",
+              "status": "draft",
+              "starts_at": "2026-06-01",
+              "custom_fields": {
+                "legal_entity": "Wolt Services Oy",
+                "pay_grade": "B2",
+                "hourly_rate_eur": 14.50,
+                "schedule_type": "standard",
+                "term_type": "indefinite"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cand_002",
+      "first_name": "Sample",
+      "last_name": "Employee A",
+      "company": null,
+      "title": null,
+      "is_private": false,
+      "phone_numbers": [
+        { "value": "+358 40 000 0002", "type": "mobile" }
+      ],
+      "addresses": [],
+      "email_addresses": [
+        { "value": "sample.a@example.invalid", "type": "personal" }
+      ],
+      "applications": [
+        {
+          "id": "app_002",
+          "candidate_id": "cand_002",
+          "status": "active",
+          "applied_at": "2026-04-20T09:15:00Z",
+          "jobs": [{ "id": "job_store_mgr_fin", "name": "Store Manager" }],
+          "office": { "id": "office_helsinki", "name": "Helsinki", "location": { "name": "Helsinki metropolitan area, Finland" } },
+          "offers": [
+            {
+              "id": "offer_002",
+              "status": "draft",
+              "starts_at": "2026-07-15",
+              "custom_fields": {
+                "legal_entity": "Wolt Services Oy",
+                "monthly_salary_eur": 4200,
+                "schedule_type": "standard",
+                "term_type": "indefinite"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cand_003",
+      "first_name": "Demo",
+      "last_name": "Persona 1",
+      "company": null,
+      "title": null,
+      "is_private": false,
+      "phone_numbers": [
+        { "value": "+358 40 000 0003", "type": "mobile" }
+      ],
+      "addresses": [],
+      "email_addresses": [
+        { "value": "demo.persona.1@example.invalid", "type": "personal" }
+      ],
+      "applications": [
+        {
+          "id": "app_003",
+          "candidate_id": "cand_003",
+          "status": "active",
+          "applied_at": "2026-05-01T11:00:00Z",
+          "jobs": [{ "id": "job_grocery_assoc_fin", "name": "Grocery Associate" }],
+          "office": { "id": "office_tampere", "name": "Tampere", "location": { "name": "Tampere, Finland" } },
+          "offers": [
+            {
+              "id": "offer_003",
+              "status": "draft",
+              "starts_at": "2026-08-01",
+              "ends_at": "2026-12-31",
+              "custom_fields": {
+                "legal_entity": "Wolt Services Oy",
+                "pay_grade": "B2",
+                "hourly_rate_eur": 14.50,
+                "schedule_type": "standard",
+                "term_type": "fixed_term"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cand_004",
+      "first_name": "Sample",
+      "last_name": "Employee B",
+      "company": null,
+      "title": null,
+      "is_private": false,
+      "phone_numbers": [
+        { "value": "+358 40 000 0004", "type": "mobile" }
+      ],
+      "addresses": [],
+      "email_addresses": [
+        { "value": "sample.b@example.invalid", "type": "personal" }
+      ],
+      "applications": [
+        {
+          "id": "app_004",
+          "candidate_id": "cand_004",
+          "status": "active",
+          "applied_at": "2026-05-08T14:45:00Z",
+          "jobs": [{ "id": "job_support_lead_fin", "name": "Customer Support Lead" }],
+          "office": { "id": "office_helsinki", "name": "Helsinki", "location": { "name": "Helsinki, Finland" } },
+          "offers": [
+            {
+              "id": "offer_004",
+              "status": "draft",
+              "starts_at": "2026-09-15",
+              "custom_fields": {
+                "legal_entity": "Wolt Oy",
+                "monthly_salary_eur": 3800,
+                "schedule_type": "shiftwork_excl_night",
+                "weekend_premium_percent": 8,
+                "term_type": "indefinite"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
