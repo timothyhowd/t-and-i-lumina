@@ -21,6 +21,15 @@ import {
 import { selectTemplate } from '@/lib/agents/agent1';
 import { collectData } from '@/lib/agents/agent2';
 import { DOC_TYPE_TO_DRIVE_FOLDER } from '@/lib/inventory';
+import { compose } from '@/lib/data-model/compose';
+import { clauseLibrary, jurisdictionRegistry } from '@/lib/data-model/registry';
+import {
+  buildDocumentFromIntent,
+  seedRecordFromIntent,
+  translateOutcome,
+} from '@/lib/data-model/api-bridge';
+import { extractRecordUpdates, fillFreeText } from '@/lib/data-model/llm-hooks';
+import type { Brand, DocumentType, ISOCountry } from '@/lib/data-model/employment-record';
 
 export const runtime = 'nodejs';
 
@@ -110,6 +119,43 @@ export async function POST(req: Request) {
       });
     }
 
+    // Step 1c (v2 path): when LUMINA_USE_V2=true, route through the universal
+    // EmploymentRecord + jurisdiction-layer pipeline. Only fires if a rule
+    // exists for this (country, docType). Falls back to v1 otherwise.
+    if (process.env.LUMINA_USE_V2 === 'true') {
+      const v2Country = intent.country as ISOCountry;
+      const v2DocType = intent.docType as DocumentType;
+      const rule = jurisdictionRegistry.get(v2Country, v2DocType);
+      if (rule) {
+        const seed = seedRecordFromIntent(
+          { country: v2Country, brand: intent.brand as Brand },
+          specialistId
+        );
+        const document = buildDocumentFromIntent({ docType: v2DocType });
+        const outcome = await compose(
+          { message, existingRecord: seed, document, history: body.history },
+          {
+            jurisdictions: jurisdictionRegistry,
+            clauses: clauseLibrary,
+            llm: { extractRecordUpdates, fillFreeText },
+          }
+        );
+        return NextResponse.json(
+          translateOutcome(outcome, {
+            intentEcho: {
+              country: intent.country,
+              brand: intent.brand,
+              docType: intent.docType,
+              understoodAs: intent.understoodAs,
+              routingContext: intent.routingContext,
+            },
+            specialistId,
+          })
+        );
+      }
+      // No v2 rule for this combo — fall through to v1.
+    }
+
     // Step 2: find a template
     const selection = await selectTemplate({
       country: intent.country,
@@ -183,6 +229,8 @@ export async function POST(req: Request) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ kind: 'error', error: message }, { status: 500 });
+    const stack = err instanceof Error ? err.stack : '';
+    console.error('[api/chat] error:', message, '\n', stack);
+    return NextResponse.json({ kind: 'error', error: message, stack: stack?.split('\n').slice(0, 8) }, { status: 500 });
   }
 }

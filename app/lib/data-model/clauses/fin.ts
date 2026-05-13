@@ -55,9 +55,9 @@ const FIN_VALIDITY: Clause = {
 
 {{#if record.terms.trialPeriod}}A trial period of {{record.terms.trialPeriod.months}} months applies, in accordance with Chapter 1 §4 of the Employment Contracts Act.{{/if}}
 
-{{#if record.terms.termType.indefinite}}The employment relationship is valid until further notice and commences on {{record.terms.startDate}}.{{/if}}
+{{#ifEq record.terms.termType "indefinite"}}The employment relationship is valid until further notice and commences on {{record.terms.startDate}}.{{/ifEq}}
 
-{{#if record.terms.termType.fixed_term}}The employment relationship is a fixed-term contract commencing on {{record.terms.startDate}} and ending on {{record.terms.endDate}}. The justified reason for the fixed-term arrangement is: {{record.terms.fixedTermReason}}.{{/if}}`,
+{{#ifEq record.terms.termType "fixed_term"}}The employment relationship is a fixed-term contract commencing on {{record.terms.startDate}} and ending on {{record.terms.endDate}}. The justified reason for the fixed-term arrangement is: {{record.terms.fixedTermReason}}.{{/ifEq}}`,
   citations: [{ ...ANCHORS.ECA, section: 'Ch.1 §3, §4' }],
   reviewStatus: 'unverified',
 };

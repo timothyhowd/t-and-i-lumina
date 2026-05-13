@@ -34,6 +34,7 @@ import type {
   ValidationResult,
 } from './jurisdiction';
 import { evaluateCondition } from './jurisdiction';
+import { runValidator } from './validators';
 
 /* ── public surface ───────────────────────────────────────────────────── */
 
@@ -146,12 +147,31 @@ function mergeRecord(
       ...updates,
     } as EmploymentRecord;
   }
-  return {
-    ...base,
-    ...updates,
-    recordVersion: base.recordVersion + 1,
-    metadata: { ...base.metadata, updatedAt: new Date().toISOString() },
-  };
+  // Deep merge — preserves discriminators (e.g. workLocation.kind) when Haiku
+  // returns an update that only sets sub-fields. Arrays and primitives replace
+  // wholesale; only plain objects are recursed.
+  const merged = deepMerge(base, updates) as EmploymentRecord;
+  merged.recordVersion = base.recordVersion + 1;
+  merged.metadata = { ...base.metadata, ...(updates.metadata ?? {}), updatedAt: new Date().toISOString() };
+  return merged;
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return v !== null && typeof v === 'object' && !Array.isArray(v);
+}
+
+function deepMerge(a: unknown, b: unknown): unknown {
+  if (!isPlainObject(a) || !isPlainObject(b)) return b === undefined ? a : b;
+  const out: Record<string, unknown> = { ...a };
+  for (const [k, v] of Object.entries(b)) {
+    if (v === undefined) continue;
+    if (isPlainObject(out[k]) && isPlainObject(v)) {
+      out[k] = deepMerge(out[k], v);
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
 }
 
 /**
@@ -168,19 +188,19 @@ export function validate(
   const invalid: ValidationResult['invalid'] = [];
 
   for (const path of rule.requiredFields) {
-    if (!readPath(record, path)) {
+    if (!isPopulated(readPath(record, path))) {
       missing.push({ path, message: `${path} is required for ${rule.country} ${rule.docType}.` });
     }
   }
 
   for (const v of rule.validators) {
-    if (v.appliesWhen && !evaluateCondition(v.appliesWhen, record)) continue;
-    // Pseudo-implementation — real validators live in ./validators.ts (TODO).
-    // For the sketch, we just check presence when required_when fires:
-    if (v.kind === 'required_when' && !readPath(record, v.path)) {
-      missing.push({ path: v.path, message: v.message ?? `${v.path} is required.` });
+    const outcome = runValidator(v, record);
+    if (outcome.ok) continue;
+    if (v.kind === 'required_when') {
+      missing.push({ path: v.path, message: outcome.message });
+    } else {
+      invalid.push({ path: v.path, validator: v.kind, message: outcome.message });
     }
-    // ...other validator kinds: max_trial_months, currency_must_be, etc.
   }
 
   return {
@@ -289,13 +309,26 @@ function resolvePlaceholders(
 }
 
 function resolveConditionals(template: string, record: EmploymentRecord): string {
-  return template.replace(
+  // Equality check first — {{#ifEq record.path "value"}}...{{/ifEq}}
+  let out = template.replace(
+    /\{\{#ifEq record\.([a-zA-Z0-9._]+) "([^"]+)"\}\}([\s\S]*?)\{\{\/ifEq\}\}/g,
+    (_, path: string, expected: string, body: string) => {
+      const v = readPath(record, path);
+      return String(v) === expected ? body : '';
+    }
+  );
+  // Presence check — {{#if record.path}}...{{/if}}
+  out = out.replace(
     /\{\{#if record\.([a-zA-Z0-9._]+)\}\}([\s\S]*?)\{\{\/if\}\}/g,
     (_, path: string, body: string) => {
       const v = readPath(record, path);
-      return v !== undefined && v !== null && v !== false && v !== '' ? body : '';
+      if (v === undefined || v === null || v === false || v === '') return '';
+      if (Array.isArray(v) && v.length === 0) return '';
+      if (typeof v === 'object' && Object.keys(v as object).length === 0) return '';
+      return body;
     }
   );
+  return out;
 }
 
 function readPath(obj: EmploymentRecord | unknown, path: string): unknown {
@@ -313,4 +346,18 @@ function readPath(obj: EmploymentRecord | unknown, path: string): unknown {
 
 function cryptoRandomId(): string {
   return 'rec_' + Math.random().toString(36).slice(2, 12);
+}
+
+/**
+ * Deep "is this populated" check — handles nested objects whose sub-fields
+ * may all be empty stubs. Seed records contain those stubs to satisfy the
+ * type system; the validator needs to see through them.
+ */
+function isPopulated(value: unknown): boolean {
+  if (value === undefined || value === null || value === '') return false;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>).some((v) => isPopulated(v));
+  }
+  return true;
 }
