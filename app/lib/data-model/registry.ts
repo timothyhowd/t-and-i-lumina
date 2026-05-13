@@ -6,9 +6,13 @@
  */
 import type { Clause, ClauseLibrary, ClauseTopic } from './clauses';
 import { FIN_CLAUSES } from './clauses/fin';
+import { USA_CLAUSES } from './clauses/usa';
+import { DEU_CLAUSES } from './clauses/deu';
 import type { DocumentType, ISOCountry } from './employment-record';
 import type { JurisdictionRegistry, JurisdictionRule } from './jurisdiction';
 import { FIN_RULES } from './jurisdictions/fin';
+import { USA_RULES } from './jurisdictions/usa';
+import { DEU_RULES } from './jurisdictions/deu';
 
 /* ── Clause library ───────────────────────────────────────────────────── */
 
@@ -74,8 +78,12 @@ export class InMemoryJurisdictionRegistry implements JurisdictionRegistry {
  */
 export const clauseLibrary: ClauseLibrary = new InMemoryClauseLibrary([
   ...FIN_CLAUSES,
+  ...USA_CLAUSES,
+  ...DEU_CLAUSES,
 ]);
 
 export const jurisdictionRegistry: JurisdictionRegistry = new InMemoryJurisdictionRegistry([
   ...FIN_RULES,
+  ...USA_RULES,
+  ...DEU_RULES,
 ]);
