@@ -1,26 +1,20 @@
 /**
- * Chat orchestration endpoint.
+ * Chat orchestration endpoint — v2.
  *
  * POST /api/chat
  *
- * Body: { message: string, sessionState?: ChatSessionState }
+ * Body: { message: string, history?: [...], sessionState?: {...} }
  *
- * Returns a streamed text response or a JSON payload depending on the
- * stage of the conversation. Per docs/POC-LIMITATIONS.md, generation
- * requires LUMINA_POC_MODE=true.
+ * Flow:
+ *   1. routeIntent (Haiku) → classify message into (country, brand, docType)
+ *   2. If addendum/termination, look up the subject employee in mock Workday
+ *      and pre-resolve the base record + document payload.
+ *   3. If country/brand still missing (and no pre-resolved lookup), clarify.
+ *   4. If a jurisdiction rule exists for (country, docType), run compose().
+ *   5. Otherwise, surface gap using Drive inventory + Opus recommendation.
  */
 import { NextResponse } from 'next/server';
 import { isPocMode } from '@/lib/poc-guard';
-import {
-  extractSlots,
-  gapBridgeRecommend,
-  generateDraft,
-  routeIntent,
-  type RoutedIntent,
-} from '@/lib/agents/agent3';
-import { selectTemplate } from '@/lib/agents/agent1';
-import { collectData } from '@/lib/agents/agent2';
-import { DOC_TYPE_TO_DRIVE_FOLDER } from '@/lib/inventory';
 import { compose } from '@/lib/data-model/compose';
 import { clauseLibrary, jurisdictionRegistry } from '@/lib/data-model/registry';
 import {
@@ -28,10 +22,26 @@ import {
   seedRecordFromIntent,
   translateOutcome,
 } from '@/lib/data-model/api-bridge';
-import { extractDeltas, extractRecordUpdates, fillFreeText, identifySubjectEmployee } from '@/lib/data-model/llm-hooks';
+import {
+  extractDeltas,
+  extractRecordUpdates,
+  fillFreeText,
+  identifySubjectEmployee,
+} from '@/lib/data-model/llm-hooks';
 import { findWorkerByName } from '@/lib/data-model/lookup';
-import type { Brand, DocumentType, ISOCountry } from '@/lib/data-model/employment-record';
-import type { AddendumDoc, TerminationLetterDoc } from '@/lib/data-model/document';
+import { routeIntent, type RoutedIntent } from '@/lib/data-model/intent';
+import { surfaceGap } from '@/lib/data-model/gap';
+import type {
+  Brand,
+  DocumentType,
+  EmploymentRecord,
+  ISOCountry,
+} from '@/lib/data-model/employment-record';
+import type {
+  AddendumDoc,
+  LuminaDocument,
+  TerminationLetterDoc,
+} from '@/lib/data-model/document';
 
 export const runtime = 'nodejs';
 
@@ -105,29 +115,21 @@ export async function POST(req: Request) {
   }
 
   const specialistId = body.sessionState?.specialistId ?? 'demo-specialist';
-  const candidateRef = body.sessionState?.candidateRef ?? null;
-  const specialistInput = body.sessionState?.specialistInput ?? {};
 
   try {
-    // Step 1: route the intent (Haiku) — pass history so multi-turn context is preserved
+    // 1. Classify intent (Haiku).
     let intent: RoutedIntent = await routeIntent(message, body.history);
 
-    // Step 1b (v2 fast-path for delta docs): if docType is addendum/termination,
-    // try to identify the subject employee and look up their existing record.
-    // The record carries jurisdiction (country + brand), so we can skip the
-    // clarify step entirely when the employee is found.
-    let preResolvedBaseRecord: import('@/lib/data-model/employment-record').EmploymentRecord | null = null;
-    let preResolvedDocument: import('@/lib/data-model/document').LuminaDocument | null = null;
-    if (
-      process.env.LUMINA_USE_V2 === 'true' &&
-      (intent.docType === 'addendum' || intent.docType === 'termination_letter')
-    ) {
+    // 2. Fast path for delta docs: look up the subject employee in mock Workday.
+    //    If found, the record carries jurisdiction, so we can skip the clarify step.
+    let preResolvedBaseRecord: EmploymentRecord | null = null;
+    let preResolvedDocument: LuminaDocument | null = null;
+    if (intent.docType === 'addendum' || intent.docType === 'termination_letter') {
       const subjectName = await identifySubjectEmployee(message);
       if (subjectName) {
         const existing = await findWorkerByName(subjectName);
         if (existing) {
           preResolvedBaseRecord = existing;
-          // Override intent country/brand from the record we found.
           intent = {
             ...intent,
             country: existing.jurisdiction.country,
@@ -155,8 +157,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // Step 1c: if we understood a doc type but are missing country/brand, ask
-    // before gap analysis. Skipped when we pre-resolved via employee lookup.
+    // 3. Clarify if we still don't know country/brand for a known doc type.
     if (intent.docType && (!intent.country || !intent.brand) && !preResolvedBaseRecord) {
       return NextResponse.json({
         kind: 'clarify',
@@ -165,119 +166,55 @@ export async function POST(req: Request) {
       });
     }
 
-    // Step 1d (v2 path): when LUMINA_USE_V2=true, route through the universal
-    // EmploymentRecord + jurisdiction-layer pipeline. Only fires if a rule
-    // exists for this (country, docType). Falls back to v1 otherwise.
-    if (process.env.LUMINA_USE_V2 === 'true') {
-      const v2Country = intent.country as ISOCountry;
-      const v2DocType = intent.docType as DocumentType;
-      const rule = jurisdictionRegistry.get(v2Country, v2DocType);
-      if (rule) {
-        const baseRecord =
-          preResolvedBaseRecord ??
-          seedRecordFromIntent({ country: v2Country, brand: intent.brand as Brand }, specialistId);
-        const document =
-          preResolvedDocument ?? buildDocumentFromIntent({ docType: v2DocType });
-
-        const outcome = await compose(
-          { message, existingRecord: baseRecord, document, history: body.history },
-          {
-            jurisdictions: jurisdictionRegistry,
-            clauses: clauseLibrary,
-            llm: { extractRecordUpdates, fillFreeText },
-          }
-        );
-        return NextResponse.json(
-          translateOutcome(outcome, {
-            intentEcho: {
-              country: intent.country,
-              brand: intent.brand,
-              docType: intent.docType,
-              understoodAs: intent.understoodAs,
-              routingContext: intent.routingContext,
-            },
-            specialistId,
-          })
-        );
-      }
-      // No v2 rule for this combo — fall through to v1.
-    }
-
-    // Step 2: find a template
-    const selection = await selectTemplate({
+    const country = intent.country as ISOCountry;
+    const docType = intent.docType as DocumentType;
+    const intentEcho = {
       country: intent.country,
       brand: intent.brand,
       docType: intent.docType,
+      understoodAs: intent.understoodAs,
       routingContext: intent.routingContext,
-    });
+    };
 
-    // Branch A: no template + no corpus → gap-bridge recommendation
-    if (selection.status === 'not_in_corpus' || selection.status === 'unparsed_but_in_corpus') {
-      const driveFolder = DOC_TYPE_TO_DRIVE_FOLDER[intent.docType] ?? intent.docType;
-      const recommendation = await gapBridgeRecommend({
-        country: intent.country,
-        brand: intent.brand,
-        docType: intent.docType,
-        closestMatches: selection.closestMatches,
-      });
-      return NextResponse.json({
-        kind: 'gap',
-        intent,
-        selection,
-        driveFolder,
-        recommendation,
-      });
+    // 4. If we have a jurisdiction rule, run compose().
+    const rule = jurisdictionRegistry.get(country, docType);
+    if (rule) {
+      const baseRecord =
+        preResolvedBaseRecord ??
+        seedRecordFromIntent({ country, brand: intent.brand as Brand }, specialistId);
+      const document = preResolvedDocument ?? buildDocumentFromIntent({ docType });
+
+      const outcome = await compose(
+        { message, existingRecord: baseRecord, document, history: body.history },
+        {
+          jurisdictions: jurisdictionRegistry,
+          clauses: clauseLibrary,
+          llm: { extractRecordUpdates, fillFreeText },
+        }
+      );
+      return NextResponse.json(translateOutcome(outcome, { intentEcho, specialistId }));
     }
 
-    // Branch B: template found — extract from natural language, then collect
-    //
-    // The extraction step is the difference between a form and a conversation.
-    // It pulls slot values out of the original message ("Tim Howd lives at
-    // 48 Arrowwood Street") so the system only asks for what's truly missing.
-    // specialistInput (slot-asking replies in chat) wins on conflict.
-    const extracted = await extractSlots(message, selection.template.slots);
-    const knownContext = { ...extracted, ...specialistInput };
-
-    const data = await collectData({
-      slotSchema: selection.template.slots,
-      routingContext: intent.routingContext,
-      candidateRef,
-      knownContext,
+    // 5. No rule for this combo — surface gap using Drive inventory.
+    const gap = await surfaceGap({
+      country: intent.country,
+      brand: intent.brand,
+      docType: intent.docType,
     });
-
-    // If anything required is still missing, return without generating.
-    if (data.missing.length > 0) {
-      return NextResponse.json({
-        kind: 'needs_input',
-        intent,
-        templateId: selection.template.templateId,
-        templateVersion: selection.template.version,
-        applicableClauseGroups: selection.applicableClauseGroups,
-        filled: data.filled,
-        missing: data.missing,
-      });
-    }
-
-    // Branch C: everything in hand — generate the draft
-    const draft = await generateDraft({
-      template: selection.template,
-      filled: data.filled,
-      missing: data.missing,
-      routingContext: intent.routingContext,
-      applicableClauseGroups: selection.applicableClauseGroups,
-      specialistId,
-    });
-
     return NextResponse.json({
-      kind: 'draft',
-      intent,
-      filled: data.filled,
-      ...draft,
+      kind: 'gap',
+      intent: intentEcho,
+      selection: { status: 'no_rule', closestMatches: gap.closestMatches },
+      driveFolder: gap.driveFolder,
+      recommendation: gap.recommendation,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const stack = err instanceof Error ? err.stack : '';
     console.error('[api/chat] error:', message, '\n', stack);
-    return NextResponse.json({ kind: 'error', error: message, stack: stack?.split('\n').slice(0, 8) }, { status: 500 });
+    return NextResponse.json(
+      { kind: 'error', error: message, stack: stack?.split('\n').slice(0, 8) },
+      { status: 500 }
+    );
   }
 }
