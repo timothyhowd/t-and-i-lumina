@@ -109,7 +109,11 @@ export async function compose(
   for (const clause of selected) {
     rendered.push(await renderClause(clause, record, input.document, deps));
   }
-  const body = rendered.join('\n\n');
+  // Collapse residual blank lines that conditional resolution leaves behind.
+  const body = rendered
+    .join('\n\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/^[ \t]+$/gm, '');
 
   // 6. Citations.
   const citations = buildCitationsBlock(selected, rule);
@@ -288,6 +292,22 @@ function buildCitationsBlock(clauses: Clause[], rule: JurisdictionRule): string 
 
 /* ── helpers (stub bodies — production impls in companion files) ──────── */
 
+/**
+ * Paths whose enum values should be humanized on render
+ * (e.g. "bi_weekly" → "bi-weekly", "fixed_term" → "fixed term").
+ */
+const HUMANIZE_PATHS = new Set([
+  'compensation.payFrequency',
+  'compensation.structure',
+  'terms.termType',
+  'schedule.scheduleType',
+  'position.classification.tier',
+]);
+
+function humanizeEnum(value: string): string {
+  return value.replace(/_/g, value.includes('bi_') ? '-' : ' ');
+}
+
 function resolvePlaceholders(
   template: string,
   ctx: { record: EmploymentRecord; document: LuminaDocument }
@@ -295,16 +315,28 @@ function resolvePlaceholders(
   return template.replace(/\{\{([a-z][a-zA-Z0-9._\[\]"]*)\}\}/g, (_, path) => {
     const root = path.startsWith('record.') ? ctx.record : path.startsWith('document.') ? ctx.document : null;
     if (!root) return `{{${path}}}`;
-    const rest = path.split('.').slice(1);
+    // Split on dots, then strip [N] brackets — `changes.[0].effectiveDate`
+    // and `changes.0.effectiveDate` both resolve.
+    const rest = path.split('.').slice(1).map((s: string) => s.replace(/^\[(\d+)\]$/, '$1'));
     let cur: unknown = root;
     for (const seg of rest) {
-      if (cur && typeof cur === 'object' && seg in (cur as object)) {
+      if (cur === null || cur === undefined) return `[MISSING: ${path}]`;
+      if (Array.isArray(cur)) {
+        const idx = Number(seg);
+        if (!Number.isFinite(idx) || idx < 0 || idx >= cur.length) return `[MISSING: ${path}]`;
+        cur = cur[idx];
+      } else if (typeof cur === 'object' && seg in (cur as object)) {
         cur = (cur as Record<string, unknown>)[seg];
       } else {
         return `[MISSING: ${path}]`;
       }
     }
-    return String(cur ?? `[MISSING: ${path}]`);
+    if (cur === undefined || cur === null) return `[MISSING: ${path}]`;
+    const tail = rest.join('.');
+    if (typeof cur === 'string' && HUMANIZE_PATHS.has(tail)) {
+      return humanizeEnum(cur);
+    }
+    return String(cur);
   });
 }
 

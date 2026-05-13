@@ -169,6 +169,92 @@
         "schedule_type": "shiftwork_excl_night",
         "weekend_premium_percent": 8
       }
+    },
+    {
+      "worker_id": "wkr_005",
+      "external_candidate_ref": "cand_005",
+      "personal": {
+        "full_legal_name": "Aino Mäkinen",
+        "preferred_name": "Aino",
+        "date_of_birth": "1990-03-14",
+        "home_address": "Mannerheimintie 12, 00100 Helsinki, Finland"
+      },
+      "position": {
+        "id": "pos_grocery_assoc_hel_02",
+        "title": "Grocery Associate",
+        "role_tier": "operational",
+        "manager_id": "wkr_mgr_001"
+      },
+      "employment": {
+        "hire_date": "2024-08-01",
+        "term_type": "indefinite",
+        "end_date": null,
+        "trial_period_months": 6
+      },
+      "location": {
+        "primary": "Helsinki",
+        "type": "city_enum"
+      },
+      "compensation": {
+        "structure": "monthly_fixed",
+        "pay_grade": null,
+        "base_pay": { "amount": 3400, "currency": "EUR", "frequency": "monthly" },
+        "hourly_rate": null,
+        "monthly_eur": 3400
+      },
+      "legal_entity": {
+        "id": "wolt_services_oy",
+        "legal_name": "Wolt Services Oy",
+        "business_id": "3126563-4",
+        "registered_address": "Pohjoinen Rautatiekatu 21, 00100 Helsinki, Finland"
+      },
+      "schedule": {
+        "weekly_hours_avg": 37.5,
+        "schedule_type": "standard"
+      }
+    },
+    {
+      "worker_id": "wkr_006",
+      "external_candidate_ref": "cand_006",
+      "personal": {
+        "full_legal_name": "Jamie Park",
+        "preferred_name": "Jamie",
+        "date_of_birth": "1988-11-02",
+        "home_address": "1234 Oak Street, Austin, TX 78701, USA"
+      },
+      "position": {
+        "id": "pos_swe_aus_01",
+        "title": "Senior Software Engineer",
+        "role_tier": "specialist",
+        "manager_id": "wkr_mgr_006"
+      },
+      "employment": {
+        "hire_date": "2025-02-10",
+        "term_type": "at_will",
+        "end_date": null,
+        "trial_period_months": null
+      },
+      "location": {
+        "primary": "Austin, TX",
+        "type": "remote_metro"
+      },
+      "compensation": {
+        "structure": "annual_fixed",
+        "pay_grade": null,
+        "base_pay": { "amount": 180000, "currency": "USD", "frequency": "annual" },
+        "hourly_rate": null,
+        "monthly_eur": null
+      },
+      "legal_entity": {
+        "id": "doordash_technologies_inc",
+        "legal_name": "DoorDash Technologies Inc.",
+        "business_id": "46-2852392",
+        "registered_address": "303 2nd Street, San Francisco, CA 94107, USA"
+      },
+      "schedule": {
+        "weekly_hours_avg": 40,
+        "schedule_type": "standard"
+      }
     }
   ],
   "legal_entities": [

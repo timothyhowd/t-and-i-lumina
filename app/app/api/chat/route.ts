@@ -28,8 +28,10 @@ import {
   seedRecordFromIntent,
   translateOutcome,
 } from '@/lib/data-model/api-bridge';
-import { extractRecordUpdates, fillFreeText } from '@/lib/data-model/llm-hooks';
+import { extractDeltas, extractRecordUpdates, fillFreeText, identifySubjectEmployee } from '@/lib/data-model/llm-hooks';
+import { findWorkerByName } from '@/lib/data-model/lookup';
 import type { Brand, DocumentType, ISOCountry } from '@/lib/data-model/employment-record';
+import type { AddendumDoc, TerminationLetterDoc } from '@/lib/data-model/document';
 
 export const runtime = 'nodejs';
 
@@ -108,10 +110,54 @@ export async function POST(req: Request) {
 
   try {
     // Step 1: route the intent (Haiku) — pass history so multi-turn context is preserved
-    const intent: RoutedIntent = await routeIntent(message, body.history);
+    let intent: RoutedIntent = await routeIntent(message, body.history);
 
-    // Step 1b: if we understood a doc type but are missing country/brand, ask before gap analysis
-    if (intent.docType && (!intent.country || !intent.brand)) {
+    // Step 1b (v2 fast-path for delta docs): if docType is addendum/termination,
+    // try to identify the subject employee and look up their existing record.
+    // The record carries jurisdiction (country + brand), so we can skip the
+    // clarify step entirely when the employee is found.
+    let preResolvedBaseRecord: import('@/lib/data-model/employment-record').EmploymentRecord | null = null;
+    let preResolvedDocument: import('@/lib/data-model/document').LuminaDocument | null = null;
+    if (
+      process.env.LUMINA_USE_V2 === 'true' &&
+      (intent.docType === 'addendum' || intent.docType === 'termination_letter')
+    ) {
+      const subjectName = await identifySubjectEmployee(message);
+      if (subjectName) {
+        const existing = await findWorkerByName(subjectName);
+        if (existing) {
+          preResolvedBaseRecord = existing;
+          // Override intent country/brand from the record we found.
+          intent = {
+            ...intent,
+            country: existing.jurisdiction.country,
+            brand: existing.jurisdiction.brand,
+          };
+          if (intent.docType === 'addendum') {
+            const deltas = await extractDeltas(message, existing);
+            preResolvedDocument = {
+              documentType: 'addendum',
+              basedOn: { recordId: existing.recordId, recordVersion: existing.recordVersion },
+              changes: deltas,
+            } as AddendumDoc;
+          } else {
+            preResolvedDocument = {
+              documentType: 'termination_letter',
+              basedOn: { recordId: existing.recordId, recordVersion: existing.recordVersion },
+              termination: {
+                reason: 'mutual',
+                lastWorkingDay: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+                noticeGivenOn: new Date().toISOString().slice(0, 10),
+              },
+            } as TerminationLetterDoc;
+          }
+        }
+      }
+    }
+
+    // Step 1c: if we understood a doc type but are missing country/brand, ask
+    // before gap analysis. Skipped when we pre-resolved via employee lookup.
+    if (intent.docType && (!intent.country || !intent.brand) && !preResolvedBaseRecord) {
       return NextResponse.json({
         kind: 'clarify',
         intent,
@@ -119,7 +165,7 @@ export async function POST(req: Request) {
       });
     }
 
-    // Step 1c (v2 path): when LUMINA_USE_V2=true, route through the universal
+    // Step 1d (v2 path): when LUMINA_USE_V2=true, route through the universal
     // EmploymentRecord + jurisdiction-layer pipeline. Only fires if a rule
     // exists for this (country, docType). Falls back to v1 otherwise.
     if (process.env.LUMINA_USE_V2 === 'true') {
@@ -127,13 +173,14 @@ export async function POST(req: Request) {
       const v2DocType = intent.docType as DocumentType;
       const rule = jurisdictionRegistry.get(v2Country, v2DocType);
       if (rule) {
-        const seed = seedRecordFromIntent(
-          { country: v2Country, brand: intent.brand as Brand },
-          specialistId
-        );
-        const document = buildDocumentFromIntent({ docType: v2DocType });
+        const baseRecord =
+          preResolvedBaseRecord ??
+          seedRecordFromIntent({ country: v2Country, brand: intent.brand as Brand }, specialistId);
+        const document =
+          preResolvedDocument ?? buildDocumentFromIntent({ docType: v2DocType });
+
         const outcome = await compose(
-          { message, existingRecord: seed, document, history: body.history },
+          { message, existingRecord: baseRecord, document, history: body.history },
           {
             jurisdictions: jurisdictionRegistry,
             clauses: clauseLibrary,

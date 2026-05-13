@@ -17,7 +17,7 @@ import {
   getLLMClient,
   parseJsonResponse,
 } from '../anthropic';
-import type { LuminaDocument } from './document';
+import type { FieldDelta, LuminaDocument } from './document';
 import type { EmploymentRecord } from './employment-record';
 
 const EXTRACT_SYSTEM = `You are the extraction step for Lumina, an HR document automation system.
@@ -163,6 +163,101 @@ Constraints:
     return text.slice(0, maxChars).trimEnd() + '…';
   }
   return text;
+}
+
+/* ── delta extraction (for addendums) ─────────────────────────────────── */
+
+const SUBJECT_SYSTEM = `You are an extraction step. Given a natural-language HR request, identify the SUBJECT employee — the person the request is about.
+
+Examples:
+  "Reduce Aino's hours from 37.5 to 30" → { "subjectName": "Aino" }
+  "Promote Jamie Park to Senior Staff" → { "subjectName": "Jamie Park" }
+  "We need a new hire for the Helsinki team" → { "subjectName": null }
+  "Sample Employee B is moving to a different role" → { "subjectName": "Sample Employee B" }
+
+Output strict JSON: { "subjectName": "<name or null>" }
+Only return the name. No prose, no fences.`;
+
+/**
+ * Identify the subject employee from a natural-language addendum/termination
+ * request. Returns null when the request is about a new hire or unclear.
+ */
+export async function identifySubjectEmployee(message: string): Promise<string | null> {
+  const client = getLLMClient();
+  const resp = await client.chat.completions.create({
+    model: MODEL_HAIKU,
+    max_tokens: 256,
+    messages: [
+      { role: 'system', content: cachedSystem([SUBJECT_SYSTEM]) },
+      { role: 'user', content: message },
+    ],
+  });
+  try {
+    const parsed = parseJsonResponse<{ subjectName: string | null }>(extractText(resp));
+    return parsed.subjectName ?? null;
+  } catch {
+    return null;
+  }
+}
+
+const DELTA_SYSTEM = `You are an extraction step. Given a specialist's natural-language change request and the employee's existing record, identify the field-level changes to be made.
+
+Output strict JSON, an array of FieldDelta objects:
+
+[
+  {
+    "path": "<dot path into EmploymentRecord, e.g. 'schedule.averageWeeklyHours' or 'compensation.base.amount' or 'position.title'>",
+    "before": <previous value, from the existing record>,
+    "after": <new value, from the request>,
+    "effectiveDate": "<YYYY-MM-DD, or empty if not specified>",
+    "reason": "<short reason, optional>"
+  }
+]
+
+Common paths:
+- schedule.averageWeeklyHours        (hours change)
+- compensation.base.amount           (salary change)
+- compensation.payFrequency          (pay frequency change)
+- compensation.structure             (pay structure: hourly → salary, etc.)
+- terms.termType                     (e.g. fixed_term → indefinite)
+- terms.endDate                      (extending or removing a fixed-term end)
+- position.title                     (role change)
+- position.workLocation              (relocation)
+
+Rules:
+1. ONLY include fields actually changing in this request. If the request says "reduce hours," produce only the hours delta.
+2. The "before" value comes from the existing record (which you'll see in the user message). If unknown, omit "before".
+3. The "after" value comes from the request.
+4. Use ISO 8601 (YYYY-MM-DD) for effectiveDate. If the request says "next month," resolve to the first day of next month relative to today.
+5. NEVER invent changes. If the request is ambiguous, return an empty array [].
+6. Output only JSON. No prose, no fences.`;
+
+export async function extractDeltas(
+  message: string,
+  existingRecord: EmploymentRecord
+): Promise<FieldDelta[]> {
+  const client = getLLMClient();
+  const today = new Date().toISOString().slice(0, 10);
+  const userPrompt = `Today's date: ${today}\n\nExisting record:\n${JSON.stringify(
+    existingRecord,
+    null,
+    2
+  )}\n\nChange request:\n${message}`;
+
+  const resp = await client.chat.completions.create({
+    model: MODEL_HAIKU,
+    max_tokens: 1024,
+    messages: [
+      { role: 'system', content: cachedSystem([DELTA_SYSTEM]) },
+      { role: 'user', content: userPrompt },
+    ],
+  });
+  try {
+    const parsed = parseJsonResponse<FieldDelta[]>(extractText(resp));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 /* ── helpers ──────────────────────────────────────────────────────────── */

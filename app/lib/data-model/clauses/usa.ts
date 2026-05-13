@@ -18,9 +18,9 @@ const USA_PARTIES: Clause = {
   jurisdiction: 'USA',
   topic: 'parties',
   applicableTo: ['employment_agreement', 'addendum', 'termination_letter'],
-  body: `**To:** {{record.employee.fullName}}, {{record.employee.address.street}}, {{record.employee.address.city}}, {{record.employee.address.region}}
+  body: `**To:** {{record.employee.fullName}}, {{record.employee.address.street}}, {{record.employee.address.city}}{{#if record.employee.address.region}}, {{record.employee.address.region}}{{/if}}{{#if record.employee.address.postalCode}} {{record.employee.address.postalCode}}{{/if}}
 
-**From:** {{record.employer.legalName}}, {{record.employer.registeredAddress.street}}, {{record.employer.registeredAddress.city}}, {{record.employer.registeredAddress.region}}`,
+**From:** {{record.employer.legalName}}, {{record.employer.registeredAddress.street}}, {{record.employer.registeredAddress.city}}{{#if record.employer.registeredAddress.region}}, {{record.employer.registeredAddress.region}}{{/if}}{{#if record.employer.registeredAddress.postalCode}} {{record.employer.registeredAddress.postalCode}}{{/if}}`,
   citations: [],
   reviewStatus: 'unverified',
 };

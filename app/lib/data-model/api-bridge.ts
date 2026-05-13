@@ -184,13 +184,15 @@ export function translateOutcome(
   }
 
   const now = new Date().toISOString();
+  const previewBanner =
+    `> ⚠️ **PoC PREVIEW — clause text unverified.** Statute citations are real; clause prose is scaffolding pending counsel review. Not for execution.\n\n`;
   return {
     kind: 'draft',
     intent: context.intentEcho,
     filled: flattenRecord(outcome.record),
     documentId: outcome.record.recordId,
     watermark: `LUMINA v2 PROTOTYPE — NOT FOR EXECUTION — ${now}`,
-    draft: outcome.body,
+    draft: previewBanner + outcome.body,
     citationsBlock: `\n\n---\n\n${outcome.citations}\n\nClauses used: ${outcome.usedClauses.join(', ')}`,
     provenance: {
       documentId: outcome.record.recordId,
