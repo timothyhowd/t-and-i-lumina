@@ -76,7 +76,7 @@ type SlotAskingSession = {
 type PreviewState =
   | { kind: 'empty' }
   | { kind: 'collecting'; intent: Intent; filled: FilledSlot[]; collected: Record<string, string>; remaining: number }
-  | { kind: 'draft'; payload: Extract<ChatApiResp, { kind: 'draft' }>; brand: Brand | null };
+  | { kind: 'draft'; payload: Extract<ChatApiResp, { kind: 'draft' }>; brand: Brand | null; promptEcho?: string };
 
 /* ── page ─────────────────────────────────────────────────────────────── */
 
@@ -249,7 +249,7 @@ export default function DraftPage() {
       setActiveBrand(brand);
       if (!options.suppressFreshStatuses) updateStatusToDone(lookingId, 'Drafted ✓', brand);
       pushMessage({ id: newId(), role: 'assistant', text: 'Done — your draft is ready in the preview panel.', typewriter: true });
-      setPreview({ kind: 'draft', payload: resp, brand });
+      setPreview({ kind: 'draft', payload: resp, brand, promptEcho: message });
       setHistory((prev) => [...prev, { role: 'assistant', content: 'Draft generated.' }]);
       setBusy(false);
       return;
@@ -551,7 +551,7 @@ function LivePreview({ preview }: { preview: PreviewState }) {
   }
 
   if (preview.kind === 'draft') {
-    const { payload, brand } = preview;
+    const { payload, brand, promptEcho } = preview;
     return (
       <div className="p-6 animate-in fade-in duration-300">
         <DraftArtifact
@@ -561,6 +561,7 @@ function LivePreview({ preview }: { preview: PreviewState }) {
           citations={payload.citationsBlock}
           provenance={payload.provenance}
           brand={brand}
+          promptEcho={promptEcho}
         />
       </div>
     );

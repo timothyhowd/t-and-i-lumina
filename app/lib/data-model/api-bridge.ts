@@ -197,7 +197,9 @@ export function translateOutcome(
     provenance: {
       documentId: outcome.record.recordId,
       recordVersion: outcome.record.recordVersion,
+      documentType: context.intentEcho.docType,
       jurisdiction: outcome.record.jurisdiction,
+      understoodAs: context.intentEcho.understoodAs,
       clausesUsed: outcome.usedClauses,
       generatedAt: now,
       specialistId: context.specialistId,

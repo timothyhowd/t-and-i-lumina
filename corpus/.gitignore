@@ -3,3 +3,10 @@
 # Only the slot schemas in corpus/templates/ are committed.
 raw/
 extracts/
+
+# Per-machine feedback log. Each runs.jsonl accumulates user observations
+# tied to drafts they generated. May contain test prompts with realistic
+# (mock-persona) employee data; keep local. The README + schema are
+# committed so the format is shared.
+feedback/runs.jsonl
+feedback/*.local.jsonl

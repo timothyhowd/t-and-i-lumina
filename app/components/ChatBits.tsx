@@ -237,6 +237,7 @@ export function DraftArtifact({
   citations,
   provenance,
   brand,
+  promptEcho,
 }: {
   watermark: string;
   documentId: string;
@@ -244,8 +245,14 @@ export function DraftArtifact({
   citations: string;
   provenance: Record<string, unknown>;
   brand: Brand | null;
+  promptEcho?: string;
 }) {
   const accent = brand ? BRAND_COLOR[brand] : 'var(--accent)';
+  const intent = (provenance.jurisdiction ?? null) as
+    | { country?: string; brand?: string }
+    | null;
+  const docType = provenance.documentType as string | undefined;
+  const understoodAs = provenance.understoodAs as string | undefined;
   return (
     <div className="ml-7 mt-2 space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
       <div className="rounded-lg bg-card shadow-s2 overflow-hidden">
@@ -263,6 +270,16 @@ export function DraftArtifact({
           <DocBody markdown={body + citations} />
         </article>
       </div>
+      <FeedbackWidget
+        documentId={documentId}
+        intent={{
+          country: intent?.country,
+          brand: intent?.brand,
+          docType,
+          understoodAs,
+        }}
+        promptEcho={promptEcho}
+      />
       <details className="text-[12px] text-muted">
         <summary className="cursor-pointer select-none hover:text-ink-2 inline-flex items-center gap-1.5">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -274,6 +291,123 @@ export function DraftArtifact({
           {JSON.stringify(provenance, null, 2)}
         </pre>
       </details>
+    </div>
+  );
+}
+
+/* ── feedback widget ───────────────────────────────────────────────── */
+
+export function FeedbackWidget({
+  documentId,
+  intent,
+  promptEcho,
+}: {
+  documentId: string;
+  intent: { country?: string; brand?: string; docType?: string; understoodAs?: string };
+  promptEcho?: string;
+}) {
+  const [rating, setRating] = useState<'positive' | 'negative' | null>(null);
+  const [note, setNote] = useState('');
+  const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function persist(r: 'positive' | 'negative', noteText: string) {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const resp = await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          documentId,
+          rating: r,
+          note: noteText || undefined,
+          intent,
+          promptEcho,
+        }),
+      });
+      const data = await resp.json();
+      if (!data.ok) throw new Error(data.error ?? 'unknown error');
+      setSubmitted(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (submitted) {
+    return (
+      <div className="rounded-md border border-line bg-card px-3 py-2 text-[12px] text-muted">
+        Thanks — feedback saved to <code className="font-mono text-[11px]">corpus/feedback/runs.jsonl</code>.
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-md border border-line bg-card px-3 py-2.5 text-[12.5px]">
+      <div className="flex items-center gap-2">
+        <span className="text-muted">Was this draft useful?</span>
+        <button
+          type="button"
+          onClick={() => {
+            setRating('positive');
+            if (!note) persist('positive', '');
+          }}
+          disabled={submitting}
+          className={`rounded-md px-2 py-0.5 transition-colors ${
+            rating === 'positive'
+              ? 'bg-emerald-100 text-emerald-700'
+              : 'hover:bg-bg/60 text-ink-2'
+          }`}
+          aria-label="Thumbs up"
+        >
+          👍
+        </button>
+        <button
+          type="button"
+          onClick={() => setRating('negative')}
+          disabled={submitting}
+          className={`rounded-md px-2 py-0.5 transition-colors ${
+            rating === 'negative'
+              ? 'bg-stop-soft text-stop'
+              : 'hover:bg-bg/60 text-ink-2'
+          }`}
+          aria-label="Thumbs down"
+        >
+          👎
+        </button>
+        {rating && !submitted && (
+          <span className="ml-2 text-[11.5px] text-muted">
+            {rating === 'positive' ? 'saved — add a note?' : 'why?'}
+          </span>
+        )}
+      </div>
+      {rating && (
+        <div className="mt-2 flex gap-2 items-start">
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder={
+              rating === 'positive'
+                ? 'Optional: what worked well?'
+                : 'What was off? (citation wrong, clause text, missing field, etc.)'
+            }
+            rows={2}
+            className="flex-1 resize-none rounded-md border border-line bg-bg px-2.5 py-1.5 text-[12.5px] text-ink-2 focus:outline-none focus:border-accent/50"
+          />
+          <button
+            type="button"
+            onClick={() => persist(rating, note)}
+            disabled={submitting}
+            className="rounded-md bg-ink px-3 py-1.5 text-[12px] font-medium text-white shadow-s1 hover:bg-ink-2 disabled:opacity-60"
+          >
+            {submitting ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      )}
+      {error && <div className="mt-1.5 text-[11px] text-stop">Save failed: {error}</div>}
     </div>
   );
 }
