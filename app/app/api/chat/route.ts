@@ -65,16 +65,25 @@ const DOC_LABELS: Record<string, string> = {
   travel_letter: 'travel/visa letter',
 };
 
-function buildClarifyQuestion(intent: RoutedIntent): string {
+function buildClarify(intent: RoutedIntent): { question: string; choices: string[] } {
   const doc = DOC_LABELS[intent.docType] ?? intent.docType.replace(/_/g, ' ');
   if (!intent.country && !intent.brand) {
-    return `For ${article(doc)} ${doc} like this — which country and brand (Wolt, DoorDash, or Deliveroo) are we working with?`;
+    return {
+      question: `For ${article(doc)} ${doc} like this — which country and brand are we working with?`,
+      choices: ['Wolt (Finland)', 'DoorDash (USA)', 'Deliveroo (UK)'],
+    };
   }
   if (!intent.country) {
     const b = intent.brand === 'wolt' ? 'Wolt' : intent.brand === 'doordash' ? 'DoorDash' : 'Deliveroo';
-    return `Which country is this ${b} ${doc} for?`;
+    return {
+      question: `Which country is this ${b} ${doc} for?`,
+      choices: intent.brand === 'wolt' ? ['Finland', 'Germany'] : intent.brand === 'doordash' ? ['USA', 'Australia'] : ['UK'],
+    };
   }
-  return `Which brand is this for — Wolt, DoorDash, or Deliveroo?`;
+  return {
+    question: `Which brand is this for?`,
+    choices: ['Wolt', 'DoorDash', 'Deliveroo'],
+  };
 }
 
 function article(word: string): string {
@@ -159,10 +168,12 @@ export async function POST(req: Request) {
 
     // 3. Clarify if we still don't know country/brand for a known doc type.
     if (intent.docType && (!intent.country || !intent.brand) && !preResolvedBaseRecord) {
+      const c = buildClarify(intent);
       return NextResponse.json({
         kind: 'clarify',
         intent,
-        question: buildClarifyQuestion(intent),
+        question: c.question,
+        choices: c.choices,
       });
     }
 

@@ -338,6 +338,40 @@ function inline(s: string): string {
     .replace(/\[MISSING:\s*([^\]]+)\]/g, '<span class="inline-block bg-stop-soft border border-stop/30 text-stop text-[12px] font-mono px-1.5 py-0.5 rounded" style="color: var(--stop); background: var(--stop-soft); border-color: rgba(220, 38, 38, 0.3);">missing: $1</span>');
 }
 
+/* ── quick replies (clarify question chips) ─────────────────────────── */
+
+export function QuickReplies({
+  choices,
+  consumed,
+  onChoose,
+}: {
+  choices: string[];
+  consumed: boolean;
+  onChoose: (text: string) => void;
+}) {
+  return (
+    <div className="ml-7 mt-1 animate-in fade-in slide-in-from-bottom-1 duration-200">
+      <div className="flex flex-wrap gap-2">
+        {choices.map((c) => (
+          <button
+            key={c}
+            type="button"
+            disabled={consumed}
+            onClick={() => onChoose(c)}
+            className={`rounded-full border px-3 py-1.5 text-[13px] shadow-s1 transition-all ${
+              consumed
+                ? 'border-line bg-bg text-muted/70 cursor-default'
+                : 'border-line bg-card text-ink-2 hover:border-accent/50 hover:shadow-s2'
+            }`}
+          >
+            {c}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ── gap card ──────────────────────────────────────────────────────── */
 
 type GapIntent = { country: string | null; brand: string | null; docType: string };
@@ -345,9 +379,15 @@ type GapIntent = { country: string | null; brand: string | null; docType: string
 export function GapCard({
   intent,
   options,
+  consumed,
+  onChoose,
+  onStartOver,
 }: {
   intent: GapIntent;
   options: Array<{ kind: string; description: string }>;
+  consumed: boolean;
+  onChoose: (text: string) => void;
+  onStartOver: () => void;
 }) {
   const topTwo = options.slice(0, 2);
   const country = intent.country ?? 'that country';
@@ -372,7 +412,13 @@ export function GapCard({
             <button
               key={i}
               type="button"
-              className="rounded-full border border-line bg-bg px-3 py-1 text-[12.5px] text-ink-2 shadow-s1 transition-all hover:border-accent/40 hover:bg-card hover:shadow-s2"
+              disabled={consumed}
+              onClick={() => onChoose(buildGapAction(opt, country))}
+              className={`rounded-full border px-3 py-1 text-[12.5px] shadow-s1 transition-all ${
+                consumed
+                  ? 'border-line bg-bg text-muted/70 cursor-default'
+                  : 'border-line bg-bg text-ink-2 hover:border-accent/40 hover:bg-card hover:shadow-s2'
+              }`}
             >
               {prettyKind(opt.kind)}
             </button>
@@ -381,9 +427,45 @@ export function GapCard({
         {topTwo[0] && (
           <p className="text-[12.5px] text-muted leading-5">{topTwo[0].description}</p>
         )}
+        {!consumed && (
+          <div className="pt-1">
+            <button
+              type="button"
+              onClick={onStartOver}
+              className="text-[11.5px] text-muted hover:text-ink-2 underline decoration-dotted underline-offset-2 transition-colors"
+            >
+              Or start over with a different request
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
+}
+
+function buildGapAction(
+  opt: { kind: string; description: string },
+  country: string
+): string {
+  // Translate the option into a follow-up user message the router can re-route on.
+  // Try to extract the closest country from the option's description; if not present,
+  // send a generic version that includes the kind so the model can interpret.
+  const m = opt.description.match(/\b(USA|UK|United States|Germany|Finland|Poland|Australia|France|Sweden|Norway|Spain|Italy|Brazil|Mexico|Japan|Canada|Ireland|Denmark|Netherlands|Belgium|Austria)\b/i);
+  const candidate = m ? m[0] : null;
+  switch (opt.kind) {
+    case 'closest_country':
+      return candidate
+        ? `Yes — adapt the ${candidate} template structure for ${country}.`
+        : `Adapt the closest match — use it as a starting point.`;
+    case 'related_doc_type':
+      return `Use a related document type instead.`;
+    case 'from_scratch':
+      return `Draft from scratch using a generic structure.`;
+    case 'request_template':
+      return `Submit a request for a new ${country} template.`;
+    default:
+      return opt.description;
+  }
 }
 
 function prettyKind(k: string): string {

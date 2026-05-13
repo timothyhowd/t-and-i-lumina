@@ -83,14 +83,69 @@ export function extractText(response: OpenAI.Chat.Completions.ChatCompletion): s
   return response.choices[0]?.message?.content ?? '';
 }
 
-/** Parse a JSON object out of a model response, tolerating code-fence wrap. */
+/**
+ * Parse a JSON object out of a model response. Tolerates:
+ *   - code-fence wrap (```json ... ```)
+ *   - trailing prose after the JSON value (Haiku occasionally appends
+ *     an explanation despite "no prose" instructions)
+ *   - leading prose before the JSON value
+ *
+ * Strategy: try a strict parse first. On failure, locate the first
+ * balanced top-level `{...}` or `[...]` and parse that.
+ */
 export function parseJsonResponse<T = unknown>(text: string): T {
   const stripped = text
     .trim()
     .replace(/^```(?:json)?\s*/i, '')
     .replace(/\s*```$/i, '')
     .trim();
-  return JSON.parse(stripped) as T;
+  try {
+    return JSON.parse(stripped) as T;
+  } catch {
+    const extracted = extractFirstJsonValue(stripped);
+    if (extracted !== null) return JSON.parse(extracted) as T;
+    throw new Error(
+      `Model response was not valid JSON. First 200 chars: ${stripped.slice(0, 200)}`
+    );
+  }
+}
+
+/**
+ * Find the first balanced {} or [] block at any depth. Handles strings
+ * and escapes correctly so braces inside quoted text don't fool us.
+ */
+function extractFirstJsonValue(text: string): string | null {
+  // Find the first opening bracket
+  let start = -1;
+  let opener = '';
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '{' || text[i] === '[') {
+      start = i;
+      opener = text[i];
+      break;
+    }
+  }
+  if (start === -1) return null;
+  const closer = opener === '{' ? '}' : ']';
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (escape) { escape = false; continue; }
+    if (inString) {
+      if (ch === '\\') escape = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') { inString = true; continue; }
+    if (ch === opener) depth++;
+    else if (ch === closer) {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  return null;
 }
 
 /**

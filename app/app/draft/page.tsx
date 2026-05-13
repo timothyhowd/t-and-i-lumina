@@ -8,6 +8,7 @@ import {
   DraftArtifact,
   ExtractedCard,
   GapCard,
+  QuickReplies,
   SLOT_LABELS,
   StatusPill,
   SummaryCard,
@@ -24,7 +25,7 @@ type FilledSlot = { slot: string; value: unknown; source: string; confidence: nu
 type MissingSlot = { slot: string; reason: string; askPrompt: string };
 type ChatApiResp =
   | { kind: 'error'; error: string }
-  | { kind: 'clarify'; intent: Intent; question: string }
+  | { kind: 'clarify'; intent: Intent; question: string; choices?: string[] }
   | { kind: 'gap'; intent: Intent; driveFolder: string; recommendation: { summary: string; options: Array<{ kind: string; description: string }> }; selection: { closestMatches: unknown } }
   | { kind: 'needs_input'; intent: Intent; templateId: string; templateVersion: string; filled: FilledSlot[]; missing: MissingSlot[]; applicableClauseGroups: string[] }
   | {
@@ -47,16 +48,17 @@ type Message =
   | { id: string; role: 'status'; state: 'in_progress' | 'done' | 'error'; text: string; brand?: Brand | null }
   | { id: string; role: 'extracted_card'; rows: ExtractedRow[]; brand: Brand | null }
   | { id: string; role: 'summary_card'; brand: Brand | null; docType: string; highlights: ExtractedRow[] }
-  | { id: string; role: 'assistant_gap'; payload: Extract<ChatApiResp, { kind: 'gap' }>; intent: Intent };
+  | { id: string; role: 'quick_replies'; choices: string[]; consumed: boolean }
+  | { id: string; role: 'assistant_gap'; payload: Extract<ChatApiResp, { kind: 'gap' }>; intent: Intent; consumed: boolean };
 
 let idCounter = 0;
 const newId = () => `m-${++idCounter}`;
 
 const EXAMPLE_PROMPTS = [
-  'New Wolt Finland hire — Aino Mäkinen, Helsinki, €3,400/month, permanent, starts August 1, 2026',
-  'Fixed-term contract for a warehouse supervisor in Finland starting next month, Wolt',
-  'I need to reduce an employee\'s hours — going from 37.5 to 30 per week',
-  'Termination letter for a DoorDash driver in California',
+  'Create an employment agreement',
+  'Modify an existing employee\'s contract',
+  'Issue a termination letter',
+  'Generate an employment certificate',
 ];
 
 /* ── session state for ongoing slot-asking ────────────────────────────── */
@@ -106,6 +108,33 @@ export default function DraftPage() {
           : m
       )
     );
+
+  /**
+   * Mark a chip/gap-card as consumed so it visually grays out after the user
+   * selects an option. Keeps the choice visible (for context) but prevents
+   * re-selection.
+   */
+  const consumeMessage = (id: string) =>
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === id && (m.role === 'quick_replies' || m.role === 'assistant_gap')
+          ? { ...m, consumed: true }
+          : m
+      )
+    );
+
+  /**
+   * Send a quick-reply or gap-card button selection as if the user had typed
+   * it. Shares the same downstream flow as submit().
+   */
+  async function sendChoice(messageId: string, text: string) {
+    if (busy) return;
+    consumeMessage(messageId);
+    pushMessage({ id: newId(), role: 'user', text });
+    const updatedHistory = [...history, { role: 'user' as const, content: text }];
+    setHistory(updatedHistory);
+    await runChatApi(text, candidateRef || null, {}, updatedHistory);
+  }
 
   /* ── primary submit handler ───────────────────────────────────────── */
   async function submit() {
@@ -194,6 +223,9 @@ export default function DraftPage() {
         ? `${understood}\n\n${resp.question}`
         : resp.question;
       pushMessage({ id: newId(), role: 'assistant', text: fullQuestion, typewriter: true });
+      if (resp.choices && resp.choices.length > 0) {
+        pushMessage({ id: newId(), role: 'quick_replies', choices: resp.choices, consumed: false });
+      }
       setHistory((prev) => [...prev, { role: 'assistant', content: fullQuestion }]);
       setBusy(false);
       return;
@@ -204,7 +236,7 @@ export default function DraftPage() {
       const brand = resp.intent.brand ?? null;
       setActiveBrand(brand);
       if (!options.suppressFreshStatuses) updateStatusToDone(lookingId, briefIntent(resp.intent), brand);
-      pushMessage({ id: newId(), role: 'assistant_gap', payload: resp, intent: resp.intent });
+      pushMessage({ id: newId(), role: 'assistant_gap', payload: resp, intent: resp.intent, consumed: false });
       const assistantText = `No ${prettyDocType(resp.intent.docType)} template for ${resp.intent.country ?? 'that country'} yet.`;
       setHistory((prev) => [...prev, { role: 'assistant', content: assistantText }]);
       setBusy(false);
@@ -409,6 +441,19 @@ export default function DraftPage() {
                       key={m.id}
                       intent={m.intent}
                       options={p.recommendation.options}
+                      consumed={m.consumed}
+                      onChoose={(text) => sendChoice(m.id, text)}
+                      onStartOver={reset}
+                    />
+                  );
+                }
+                if (m.role === 'quick_replies') {
+                  return (
+                    <QuickReplies
+                      key={m.id}
+                      choices={m.choices}
+                      consumed={m.consumed}
+                      onChoose={(text) => sendChoice(m.id, text)}
                     />
                   );
                 }
