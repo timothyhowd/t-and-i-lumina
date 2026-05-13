@@ -24,6 +24,7 @@ type FilledSlot = { slot: string; value: unknown; source: string; confidence: nu
 type MissingSlot = { slot: string; reason: string; askPrompt: string };
 type ChatApiResp =
   | { kind: 'error'; error: string }
+  | { kind: 'clarify'; intent: Intent; question: string }
   | { kind: 'gap'; intent: Intent; driveFolder: string; recommendation: { summary: string; options: Array<{ kind: string; description: string }> }; selection: { closestMatches: unknown } }
   | { kind: 'needs_input'; intent: Intent; templateId: string; templateVersion: string; filled: FilledSlot[]; missing: MissingSlot[]; applicableClauseGroups: string[] }
   | {
@@ -37,6 +38,8 @@ type ChatApiResp =
       provenance: Record<string, unknown>;
     };
 
+type HistoryEntry = { role: 'user' | 'assistant'; content: string };
+
 /* ── message graph ────────────────────────────────────────────────────── */
 type Message =
   | { id: string; role: 'user'; text: string }
@@ -44,17 +47,16 @@ type Message =
   | { id: string; role: 'status'; state: 'in_progress' | 'done' | 'error'; text: string; brand?: Brand | null }
   | { id: string; role: 'extracted_card'; rows: ExtractedRow[]; brand: Brand | null }
   | { id: string; role: 'summary_card'; brand: Brand | null; docType: string; highlights: ExtractedRow[] }
-  | { id: string; role: 'assistant_draft'; payload: Extract<ChatApiResp, { kind: 'draft' }>; brand: Brand | null }
-  | { id: string; role: 'assistant_gap'; payload: Extract<ChatApiResp, { kind: 'gap' }> };
+  | { id: string; role: 'assistant_gap'; payload: Extract<ChatApiResp, { kind: 'gap' }>; intent: Intent };
 
 let idCounter = 0;
 const newId = () => `m-${++idCounter}`;
 
 const EXAMPLE_PROMPTS = [
-  'New person on my team — Tim Howd, 48 Arrowwood Street, 5000 EUR/month, starts June 1, 2026',
-  'Reduce Aino\'s hours from 37.5 to 30 starting next month',
-  'Convert Olli from fixed-term to permanent',
-  'UK Deliveroo employment agreement',
+  'New Wolt Finland hire — Aino Mäkinen, Helsinki, €3,400/month, permanent, starts August 1, 2026',
+  'Fixed-term contract for a warehouse supervisor in Finland starting next month, Wolt',
+  'I need to reduce an employee\'s hours — going from 37.5 to 30 per week',
+  'Termination letter for a DoorDash driver in California',
 ];
 
 /* ── session state for ongoing slot-asking ────────────────────────────── */
@@ -64,11 +66,15 @@ type SlotAskingSession = {
   templateId: string;
   collected: Record<string, string>;
   queue: MissingSlot[];
-  /** Slots originally filled from extraction or systems — for ExtractedCard. */
   initialFilled: FilledSlot[];
-  /** The intent so we can re-summarize at the end. */
   intent: Intent;
 };
+
+/* ── live preview state ───────────────────────────────────────────────── */
+type PreviewState =
+  | { kind: 'empty' }
+  | { kind: 'collecting'; intent: Intent; filled: FilledSlot[]; collected: Record<string, string>; remaining: number }
+  | { kind: 'draft'; payload: Extract<ChatApiResp, { kind: 'draft' }>; brand: Brand | null };
 
 /* ── page ─────────────────────────────────────────────────────────────── */
 
@@ -80,6 +86,8 @@ export default function DraftPage() {
   const [session, setSession] = useState<SlotAskingSession | null>(null);
   const [activeBrand, setActiveBrand] = useState<Brand | null>(null);
   const [pendingSummary, setPendingSummary] = useState(false);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [preview, setPreview] = useState<PreviewState>({ kind: 'empty' });
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -111,21 +119,31 @@ export default function DraftPage() {
       pushMessage({ id: newId(), role: 'user', text });
       const collected = { ...session.collected, [currentSlot.slot]: text };
       const queueAfter = session.queue.slice(1);
+      const updatedSession = { ...session, collected, queue: queueAfter };
+
+      setPreview({
+        kind: 'collecting',
+        intent: session.intent,
+        filled: session.initialFilled,
+        collected,
+        remaining: queueAfter.length,
+      });
 
       if (queueAfter.length > 0) {
         const next = queueAfter[0];
-        setSession({ ...session, collected, queue: queueAfter });
+        setSession(updatedSession);
         await acknowledgeAndAsk(next, queueAfter.length);
       } else {
-        // All slots gathered — show summary card instead of immediately drafting.
-        setSession({ ...session, collected, queue: queueAfter });
-        showSummaryCard({ ...session, collected, queue: queueAfter });
+        setSession(updatedSession);
+        showSummaryCard(updatedSession);
       }
       return;
     }
 
     pushMessage({ id: newId(), role: 'user', text });
-    await runChatApi(text, candidateRef || null, {});
+    const updatedHistory = [...history, { role: 'user' as const, content: text }];
+    setHistory(updatedHistory);
+    await runChatApi(text, candidateRef || null, {}, updatedHistory);
   }
 
   /* ── core API call + response handling ────────────────────────────── */
@@ -133,6 +151,7 @@ export default function DraftPage() {
     message: string,
     candRef: string | null,
     specialistInput: Record<string, unknown>,
+    currentHistory: HistoryEntry[],
     options: { suppressFreshStatuses?: boolean } = {}
   ) {
     setBusy(true);
@@ -148,6 +167,7 @@ export default function DraftPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message,
+          history: currentHistory.slice(0, -1), // send history excluding the current message (already in `message`)
           sessionState: { candidateRef: candRef, specialistInput, specialistId: 'demo-specialist' },
         }),
       });
@@ -166,18 +186,27 @@ export default function DraftPage() {
       return;
     }
 
+    /* CLARIFY — missing country/brand, ask before doing anything else */
+    if (resp.kind === 'clarify') {
+      const understood = resp.intent.understoodAs;
+      if (!options.suppressFreshStatuses) updateStatusToDone(lookingId, understood ?? 'Got it');
+      const fullQuestion = understood
+        ? `${understood}\n\n${resp.question}`
+        : resp.question;
+      pushMessage({ id: newId(), role: 'assistant', text: fullQuestion, typewriter: true });
+      setHistory((prev) => [...prev, { role: 'assistant', content: fullQuestion }]);
+      setBusy(false);
+      return;
+    }
+
     /* GAP */
     if (resp.kind === 'gap') {
       const brand = resp.intent.brand ?? null;
       setActiveBrand(brand);
       if (!options.suppressFreshStatuses) updateStatusToDone(lookingId, briefIntent(resp.intent), brand);
-      pushMessage({
-        id: newId(),
-        role: 'assistant',
-        text: `I don't have a template for this exact combination — here's what I can offer:`,
-        typewriter: true,
-      });
-      pushMessage({ id: newId(), role: 'assistant_gap', payload: resp });
+      pushMessage({ id: newId(), role: 'assistant_gap', payload: resp, intent: resp.intent });
+      const assistantText = `No ${prettyDocType(resp.intent.docType)} template for ${resp.intent.country ?? 'that country'} yet.`;
+      setHistory((prev) => [...prev, { role: 'assistant', content: assistantText }]);
       setBusy(false);
       return;
     }
@@ -186,8 +215,10 @@ export default function DraftPage() {
     if (resp.kind === 'draft') {
       const brand = resp.intent.brand ?? null;
       setActiveBrand(brand);
-      pushMessage({ id: newId(), role: 'status', state: 'done', text: 'Drafted ✓', brand });
-      pushMessage({ id: newId(), role: 'assistant_draft', payload: resp, brand });
+      if (!options.suppressFreshStatuses) updateStatusToDone(lookingId, 'Drafted ✓', brand);
+      pushMessage({ id: newId(), role: 'assistant', text: 'Done — your draft is ready in the preview panel.', typewriter: true });
+      setPreview({ kind: 'draft', payload: resp, brand });
+      setHistory((prev) => [...prev, { role: 'assistant', content: 'Draft generated.' }]);
       setBusy(false);
       return;
     }
@@ -204,9 +235,16 @@ export default function DraftPage() {
         pushMessage({ id: newId(), role: 'extracted_card', rows: extractedRows, brand });
       }
 
+      setPreview({
+        kind: 'collecting',
+        intent: resp.intent,
+        filled: resp.filled,
+        collected: {},
+        remaining: resp.missing.length,
+      });
+
       const queue = [...resp.missing];
       if (queue.length === 0) {
-        // Nothing to ask — go straight to the summary card.
         const sessionState: SlotAskingSession = {
           originalMessage: message,
           candidateRef: candRef,
@@ -222,15 +260,11 @@ export default function DraftPage() {
       }
 
       const firstSlot = queue[0];
-      pushMessage({
-        id: newId(),
-        role: 'assistant',
-        text:
-          queue.length === 1
-            ? `One last thing. ${firstSlot.askPrompt}`
-            : `Just need ${queue.length} more thing${queue.length === 1 ? '' : 's'}. ${firstSlot.askPrompt}`,
-        typewriter: true,
-      });
+      const askText = queue.length === 1
+        ? `One last thing. ${firstSlot.askPrompt}`
+        : `Just need ${queue.length} more thing${queue.length === 1 ? '' : 's'}. ${firstSlot.askPrompt}`;
+      pushMessage({ id: newId(), role: 'assistant', text: askText, typewriter: true });
+      setHistory((prev) => [...prev, { role: 'assistant', content: askText }]);
 
       setSession({
         originalMessage: message,
@@ -253,12 +287,9 @@ export default function DraftPage() {
     const acks = ['Got it. ', 'Thanks. ', 'Noted. ', 'Okay. ', ''];
     const ack = acks[Math.floor(Math.random() * acks.length)];
     const prefix = remainingCount === 1 ? `${ack}One more — ` : `${ack}`;
-    pushMessage({
-      id: newId(),
-      role: 'assistant',
-      text: `${prefix}${nextSlot.askPrompt}`,
-      typewriter: true,
-    });
+    const text = `${prefix}${nextSlot.askPrompt}`;
+    pushMessage({ id: newId(), role: 'assistant', text, typewriter: true });
+    setHistory((prev) => [...prev, { role: 'assistant', content: text }]);
   }
 
   /* ── summary card flow ────────────────────────────────────────────── */
@@ -272,7 +303,7 @@ export default function DraftPage() {
       .map((k) => ({
         label: SLOT_LABELS[k] ?? k,
         value: presentSlotValue(k, allFilled[k]),
-        source: 'message' as const, // doesn't matter for SummaryCard rendering
+        source: 'message' as const,
       }));
 
     setPendingSummary(true);
@@ -290,34 +321,24 @@ export default function DraftPage() {
     setPendingSummary(false);
     pushMessage({ id: newId(), role: 'status', state: 'in_progress', text: 'Drafting…', brand: activeBrand });
     setBusy(true);
-    // Re-submit with everything we've gathered.
     const allInput = { ...session.collected };
-    await runChatApi(session.originalMessage, session.candidateRef, allInput, { suppressFreshStatuses: true });
+    await runChatApi(session.originalMessage, session.candidateRef, allInput, history, { suppressFreshStatuses: true });
     setSession(null);
   }
 
   function dismissSummaryForEdit() {
     setPendingSummary(false);
-    // Filter out the most recent summary_card message so the chat clears it.
     setMessages((prev) => {
       let i = -1;
       for (let k = prev.length - 1; k >= 0; k--) {
-        if (prev[k].role === 'summary_card') {
-          i = k;
-          break;
-        }
+        if (prev[k].role === 'summary_card') { i = k; break; }
       }
       if (i === -1) return prev;
       const next = [...prev];
       next.splice(i, 1);
       return next;
     });
-    pushMessage({
-      id: newId(),
-      role: 'assistant',
-      text: 'Sure — what would you like to add or change?',
-      typewriter: true,
-    });
+    pushMessage({ id: newId(), role: 'assistant', text: 'Sure — what would you like to add or change?', typewriter: true });
   }
 
   function reset() {
@@ -327,6 +348,8 @@ export default function DraftPage() {
     setActiveBrand(null);
     setPendingSummary(false);
     setBusy(false);
+    setHistory([]);
+    setPreview({ kind: 'empty' });
     idCounter = 0;
   }
 
@@ -337,104 +360,168 @@ export default function DraftPage() {
     return 'Reply, or describe a different document…';
   }, [session, pendingSummary, messages.length]);
 
+  const hasPreview = preview.kind !== 'empty';
+
   /* ── render ────────────────────────────────────────────────────────── */
   return (
     <div className="flex h-screen flex-col bg-bg">
       <AppHeader activeBrand={activeBrand} onBrandChange={setActiveBrand} />
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-3xl px-5 py-8 space-y-4">
-          {isEmpty ? <EmptyState onPick={(s) => setComposerValue(s)} /> : null}
+      <div className="flex flex-1 overflow-hidden">
+        {/* ── Left: chat ── */}
+        <div className={`flex flex-col ${hasPreview ? 'w-1/2 border-r border-line' : 'w-full'} transition-all duration-300`}>
+          <div ref={scrollRef} className="flex-1 overflow-y-auto">
+            <div className="mx-auto max-w-2xl px-5 py-8 space-y-4">
+              {isEmpty ? <EmptyState onPick={(s) => setComposerValue(s)} /> : null}
 
-          {messages.map((m) => {
-            if (m.role === 'user') return <UserBubble key={m.id}>{m.text}</UserBubble>;
-            if (m.role === 'status')
-              return (
-                <StatusPill key={m.id} state={m.state} brand={m.brand}>
-                  {m.text}
-                </StatusPill>
-              );
-            if (m.role === 'assistant')
-              return (
-                <AssistantBubble key={m.id}>
-                  {m.typewriter ? <Typewriter text={m.text} /> : m.text}
-                </AssistantBubble>
-              );
-            if (m.role === 'extracted_card')
-              return <ExtractedCard key={m.id} rows={m.rows} brand={m.brand} />;
-            if (m.role === 'summary_card')
-              return (
-                <SummaryCard
-                  key={m.id}
-                  brand={m.brand}
-                  docType={m.docType}
-                  highlights={m.highlights}
-                  onConfirm={confirmAndDraft}
-                  onEdit={dismissSummaryForEdit}
-                  drafting={busy}
-                />
-              );
-            if (m.role === 'assistant_draft') {
-              const p = m.payload;
-              return (
-                <DraftArtifact
-                  key={m.id}
-                  watermark={p.watermark}
-                  documentId={p.documentId}
-                  body={p.draft}
-                  citations={p.citationsBlock}
-                  provenance={p.provenance}
-                  brand={m.brand}
-                />
-              );
-            }
-            if (m.role === 'assistant_gap') {
-              const p = m.payload;
-              return (
-                <GapCard
-                  key={m.id}
-                  summary={p.recommendation.summary}
-                  options={p.recommendation.options}
-                />
-              );
-            }
-            return null;
-          })}
+              {messages.map((m) => {
+                if (m.role === 'user') return <UserBubble key={m.id}>{m.text}</UserBubble>;
+                if (m.role === 'status')
+                  return (
+                    <StatusPill key={m.id} state={m.state} brand={m.brand}>
+                      {m.text}
+                    </StatusPill>
+                  );
+                if (m.role === 'assistant')
+                  return (
+                    <AssistantBubble key={m.id}>
+                      {m.typewriter ? <Typewriter text={m.text} /> : m.text}
+                    </AssistantBubble>
+                  );
+                if (m.role === 'extracted_card')
+                  return <ExtractedCard key={m.id} rows={m.rows} brand={m.brand} />;
+                if (m.role === 'summary_card')
+                  return (
+                    <SummaryCard
+                      key={m.id}
+                      brand={m.brand}
+                      docType={m.docType}
+                      highlights={m.highlights}
+                      onConfirm={confirmAndDraft}
+                      onEdit={dismissSummaryForEdit}
+                      drafting={busy}
+                    />
+                  );
+                if (m.role === 'assistant_gap') {
+                  const p = m.payload;
+                  return (
+                    <GapCard
+                      key={m.id}
+                      intent={m.intent}
+                      options={p.recommendation.options}
+                    />
+                  );
+                }
+                return null;
+              })}
 
-          {busy && !pendingSummary && <AssistantBubble thinking />}
-        </div>
-      </div>
-
-      <div className="border-t border-line bg-card/80 backdrop-blur">
-        <div className="mx-auto max-w-3xl px-5 py-3">
-          {!isEmpty && (
-            <div className="flex items-center justify-end text-[12px] text-muted mb-2">
-              <button
-                onClick={reset}
-                className="hover:text-ink-2 inline-flex items-center gap-1.5 transition-colors"
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8" />
-                  <path d="M3 3v5h5" />
-                </svg>
-                Start over
-              </button>
+              {busy && !pendingSummary && <AssistantBubble thinking />}
             </div>
-          )}
-          <Composer
-            value={composerValue}
-            onChange={setComposerValue}
-            onSubmit={submit}
-            disabled={busy && !pendingSummary}
-            placeholder={placeholder}
-          />
-          <p className="mt-2 text-center text-[11px] text-muted">
-            Lumina drafts are unverified. Specialist sign-off required before any execution.
-          </p>
+          </div>
+
+          <div className="border-t border-line bg-card/80 backdrop-blur">
+            <div className="mx-auto max-w-2xl px-5 py-3">
+              {!isEmpty && (
+                <div className="flex items-center justify-end text-[12px] text-muted mb-2">
+                  <button
+                    onClick={reset}
+                    className="hover:text-ink-2 inline-flex items-center gap-1.5 transition-colors"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8" />
+                      <path d="M3 3v5h5" />
+                    </svg>
+                    Start over
+                  </button>
+                </div>
+              )}
+              <Composer
+                value={composerValue}
+                onChange={setComposerValue}
+                onSubmit={submit}
+                disabled={busy && !pendingSummary}
+                placeholder={placeholder}
+              />
+              <p className="mt-2 text-center text-[11px] text-muted">
+                Lumina drafts are unverified. Specialist sign-off required before any execution.
+              </p>
+            </div>
+          </div>
         </div>
+
+        {/* ── Right: live preview ── */}
+        {hasPreview && (
+          <div className="w-1/2 overflow-y-auto bg-bg/50">
+            <LivePreview preview={preview} />
+          </div>
+        )}
       </div>
     </div>
   );
+}
+
+/* ── live preview panel ───────────────────────────────────────────────── */
+
+function LivePreview({ preview }: { preview: PreviewState }) {
+  if (preview.kind === 'collecting') {
+    const { intent, filled, collected, remaining } = preview;
+    const allFilled: Record<string, unknown> = {};
+    for (const f of filled) allFilled[f.slot] = f.value;
+    for (const [k, v] of Object.entries(collected)) allFilled[k] = v;
+
+    const rows = highlightOrder
+      .filter((k) => allFilled[k] !== undefined && allFilled[k] !== null && allFilled[k] !== '')
+      .map((k) => ({ label: SLOT_LABELS[k] ?? k, value: presentSlotValue(k, allFilled[k]) }));
+
+    return (
+      <div className="p-6 space-y-4 animate-in fade-in duration-200">
+        <div className="rounded-lg border border-line bg-card shadow-s1 overflow-hidden">
+          <div className="px-5 py-3 border-b border-line bg-bg/40 flex items-center justify-between">
+            <span className="text-[12px] uppercase tracking-wider text-muted">
+              {prettyDocType(intent.docType)}
+            </span>
+            <span className="text-[11px] text-muted">
+              {remaining > 0 ? `${remaining} field${remaining === 1 ? '' : 's'} remaining` : 'Ready to draft'}
+            </span>
+          </div>
+          {rows.length > 0 && (
+            <dl className="divide-y divide-line">
+              {rows.map((r) => (
+                <div key={r.label} className="grid grid-cols-[110px_1fr] items-center gap-3 px-5 py-2 text-[13.5px]">
+                  <dt className="text-muted">{r.label}</dt>
+                  <dd className="text-ink font-medium truncate">{r.value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+          <div className="px-5 py-4 space-y-2.5">
+            {[80, 95, 70, 88, 60].map((w, i) => (
+              <div key={i} className="h-2.5 rounded-full bg-line/60 animate-pulse" style={{ width: `${w}%`, animationDelay: `${i * 120}ms` }} />
+            ))}
+          </div>
+        </div>
+        <p className="text-center text-[12px] text-muted">Document preview will fill in as you answer questions</p>
+      </div>
+    );
+  }
+
+  if (preview.kind === 'draft') {
+    const { payload, brand } = preview;
+    return (
+      <div className="p-6 animate-in fade-in duration-300">
+        <DraftArtifact
+          watermark={payload.watermark}
+          documentId={payload.documentId}
+          body={payload.draft}
+          citations={payload.citationsBlock}
+          provenance={payload.provenance}
+          brand={brand}
+        />
+      </div>
+    );
+  }
+
+  return null;
 }
 
 /* ── helpers ──────────────────────────────────────────────────────────── */
@@ -448,7 +535,7 @@ function EmptyState({ onPick }: { onPick: (s: string) => void }) {
       </div>
       <h1 className="text-[28px] font-semibold tracking-tight text-ink">What do you need to draft?</h1>
       <p className="mt-2 text-[15px] text-muted max-w-xl mx-auto">
-        Describe it in plain English. I'll pick the template, fill what I can, and only ask for what's missing.
+        Describe it in plain English. I'll pick the right document type, fill what I can, and only ask for what's missing.
       </p>
       <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-2 text-left">
         {EXAMPLE_PROMPTS.map((p) => (
@@ -467,31 +554,28 @@ function EmptyState({ onPick }: { onPick: (s: string) => void }) {
 }
 
 function briefIntent(intent: Intent): string {
-  const docPretty = ({
+  const docPretty = prettyDocType(intent.docType);
+  const brandPretty =
+    intent.brand === 'wolt' ? 'Wolt' : intent.brand === 'doordash' ? 'DoorDash' : intent.brand === 'deliveroo' ? 'Deliveroo' : intent.brand;
+  return `${brandPretty} · ${intent.country} · ${docPretty}`;
+}
+
+function prettyDocType(d: string): string {
+  return ({
     employment_agreement: 'Employment agreement',
     termination_letter: 'Termination letter',
     warning_letter: 'Warning letter',
     employment_certificate: 'Employment certificate',
     nda: 'NDA',
     addendum: 'Addendum',
-    travel_letter: 'Travel/visa letter',
-  } as Record<string, string>)[intent.docType] ?? intent.docType.replace(/_/g, ' ');
-  const brandPretty =
-    intent.brand === 'wolt' ? 'Wolt' : intent.brand === 'doordash' ? 'DoorDash' : intent.brand === 'deliveroo' ? 'Deliveroo' : intent.brand;
-  return `${brandPretty} · ${intent.country} · ${docPretty}`;
+    travel_letter: 'Travel letter',
+  } as Record<string, string>)[d] ?? d.replace(/_/g, ' ');
 }
 
-/**
- * Convert the API's filled-slots list into rows for the ExtractedCard.
- * Each row picks up the slot's user-facing label and a presentable value.
- * `source` is normalized to message / system / derived.
- */
 function filledToExtractedRows(filled: FilledSlot[]): ExtractedRow[] {
   const rows: ExtractedRow[] = [];
   for (const f of filled) {
     const label = SLOT_LABELS[f.slot];
-    // Only surface slots a human cares about reviewing — skip default/derived
-    // boilerplate (trial period, weekly hours, etc.)
     if (!label) continue;
     if (f.source === 'derived' && BORING_DERIVED.has(f.slot)) continue;
     rows.push({
@@ -505,7 +589,6 @@ function filledToExtractedRows(filled: FilledSlot[]): ExtractedRow[] {
           : 'system',
     });
   }
-  // Order them by the highlight priority for consistency.
   rows.sort((a, b) => {
     const ai = highlightOrder.findIndex((k) => SLOT_LABELS[k] === a.label);
     const bi = highlightOrder.findIndex((k) => SLOT_LABELS[k] === b.label);

@@ -26,12 +26,39 @@ export const runtime = 'nodejs';
 
 type ChatRequest = {
   message: string;
+  history?: Array<{ role: 'user' | 'assistant'; content: string }>;
   sessionState?: {
     candidateRef?: string | null;
     specialistInput?: Record<string, unknown>;
     specialistId?: string;
   };
 };
+
+const DOC_LABELS: Record<string, string> = {
+  employment_agreement: 'employment agreement',
+  addendum: 'addendum',
+  termination_letter: 'termination letter',
+  warning_letter: 'warning letter',
+  employment_certificate: 'employment certificate',
+  nda: 'NDA',
+  travel_letter: 'travel/visa letter',
+};
+
+function buildClarifyQuestion(intent: RoutedIntent): string {
+  const doc = DOC_LABELS[intent.docType] ?? intent.docType.replace(/_/g, ' ');
+  if (!intent.country && !intent.brand) {
+    return `For ${article(doc)} ${doc} like this — which country and brand (Wolt, DoorDash, or Deliveroo) are we working with?`;
+  }
+  if (!intent.country) {
+    const b = intent.brand === 'wolt' ? 'Wolt' : intent.brand === 'doordash' ? 'DoorDash' : 'Deliveroo';
+    return `Which country is this ${b} ${doc} for?`;
+  }
+  return `Which brand is this for — Wolt, DoorDash, or Deliveroo?`;
+}
+
+function article(word: string): string {
+  return /^[aeiou]/i.test(word) ? 'an' : 'a';
+}
 
 export async function POST(req: Request) {
   if (!isPocMode()) {
@@ -71,8 +98,17 @@ export async function POST(req: Request) {
   const specialistInput = body.sessionState?.specialistInput ?? {};
 
   try {
-    // Step 1: route the intent (Haiku)
-    const intent: RoutedIntent = await routeIntent(message);
+    // Step 1: route the intent (Haiku) — pass history so multi-turn context is preserved
+    const intent: RoutedIntent = await routeIntent(message, body.history);
+
+    // Step 1b: if we understood a doc type but are missing country/brand, ask before gap analysis
+    if (intent.docType && (!intent.country || !intent.brand)) {
+      return NextResponse.json({
+        kind: 'clarify',
+        intent,
+        question: buildClarifyQuestion(intent),
+      });
+    }
 
     // Step 2: find a template
     const selection = await selectTemplate({

@@ -73,13 +73,17 @@ If the specialist did not specify a brand but named a country, infer from
 the brand-country defaults. Set fields to null if genuinely ambiguous.
 Output only JSON. No prose, no fences.`;
 
-export async function routeIntent(naturalLanguage: string): Promise<RoutedIntent> {
+export async function routeIntent(
+  naturalLanguage: string,
+  history?: Array<{ role: 'user' | 'assistant'; content: string }>
+): Promise<RoutedIntent> {
   const client = getLLMClient();
   const resp = await client.chat.completions.create({
     model: MODEL_HAIKU,
     max_tokens: 1024,
     messages: [
       { role: 'system', content: cachedSystem([INTENT_SYSTEM]) },
+      ...(history ?? []).map((h) => ({ role: h.role as 'user' | 'assistant', content: h.content })),
       { role: 'user', content: naturalLanguage },
     ],
   });

@@ -340,44 +340,47 @@ function inline(s: string): string {
 
 /* ── gap card ──────────────────────────────────────────────────────── */
 
+type GapIntent = { country: string | null; brand: string | null; docType: string };
+
 export function GapCard({
-  summary,
+  intent,
   options,
 }: {
-  summary: string;
+  intent: GapIntent;
   options: Array<{ kind: string; description: string }>;
 }) {
+  const topTwo = options.slice(0, 2);
+  const country = intent.country ?? 'that country';
+  const docLabel = ({
+    employment_agreement: 'employment agreement',
+    addendum: 'addendum',
+    termination_letter: 'termination letter',
+    warning_letter: 'warning letter',
+    employment_certificate: 'employment certificate',
+    nda: 'NDA',
+    travel_letter: 'travel/visa letter',
+  } as Record<string, string>)[intent.docType] ?? intent.docType.replace(/_/g, ' ');
+
   return (
-    <div className="ml-7 mt-2 space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
-      <div className="rounded-lg border border-warn/30 bg-warn-soft p-5 shadow-s1" style={{ background: 'var(--warn-soft)', borderColor: 'rgba(217, 119, 6, 0.3)' }}>
-        <div className="flex items-start gap-3">
-          <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full" style={{ background: 'rgba(217, 119, 6, 0.15)' }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" strokeWidth="2.5">
-              <path d="M12 9v4M12 17h.01" />
-              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-            </svg>
-          </div>
-          <div className="flex-1">
-            <div className="text-[14px] font-semibold" style={{ color: 'var(--warn)' }}>
-              No template for this combination yet
-            </div>
-            <p className="mt-1 text-[14px] leading-6 text-ink-2">{summary}</p>
-          </div>
-        </div>
-        <div className="mt-4 space-y-2">
-          {options.map((opt, i) => (
+    <div className="ml-7 mt-1 animate-in fade-in slide-in-from-bottom-1 duration-200">
+      <div className="rounded-lg border border-line bg-card px-4 py-3 shadow-s1 space-y-2.5">
+        <p className="text-[13.5px] text-ink-2">
+          No processed {docLabel} template for <span className="font-medium text-ink">{country}</span> yet — here's what I can do:
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {topTwo.map((opt, i) => (
             <button
               key={i}
               type="button"
-              className="block w-full text-left rounded-md border border-line bg-card p-3 shadow-s1 transition-all hover:border-warn/60 hover:shadow-s2"
+              className="rounded-full border border-line bg-bg px-3 py-1 text-[12.5px] text-ink-2 shadow-s1 transition-all hover:border-accent/40 hover:bg-card hover:shadow-s2"
             >
-              <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--warn)' }}>
-                {prettyKind(opt.kind)}
-              </div>
-              <div className="mt-0.5 text-[13.5px] text-ink-2">{opt.description}</div>
+              {prettyKind(opt.kind)}
             </button>
           ))}
         </div>
+        {topTwo[0] && (
+          <p className="text-[12.5px] text-muted leading-5">{topTwo[0].description}</p>
+        )}
       </div>
     </div>
   );
@@ -385,10 +388,10 @@ export function GapCard({
 
 function prettyKind(k: string): string {
   return ({
-    closest_country: 'Use the closest country',
-    related_doc_type: 'Adapt a related document',
+    closest_country: 'Adapt closest match',
+    related_doc_type: 'Use related doc type',
     from_scratch: 'Draft from scratch',
-    request_template: 'Request a new template',
+    request_template: 'Request template',
   } as Record<string, string>)[k] ?? k.replace(/_/g, ' ');
 }
 
