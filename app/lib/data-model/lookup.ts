@@ -20,6 +20,7 @@ type WorkdayWorker = {
     preferred_name?: string;
     date_of_birth?: string;
     home_address?: string;
+    work_email?: string;
   };
   position: {
     title: string;
@@ -95,21 +96,55 @@ function normalizeName(s: string): string {
 }
 
 export async function findWorkerByName(query: string): Promise<EmploymentRecord | null> {
+  return findWorkerByIdentifier(query);
+}
+
+/**
+ * Resolve an existing worker from any of: email, worker_id, or name.
+ *
+ * Order matters — email and worker_id are exact-by-construction so we try
+ * them first; name is fuzzy and runs last.
+ *
+ * Returns the matching worker's EmploymentRecord, or null. This is the
+ * keystone for "I shouldn't have to know more than the minimum required
+ * details" — paste an email, get the whole record.
+ */
+export async function findWorkerByIdentifier(query: string): Promise<EmploymentRecord | null> {
   const data = await loadWorkday();
-  const q = normalizeName(query);
+  const raw = query.trim();
+  if (!raw) return null;
+
+  // 1. Email — explicit "@" anywhere → email lookup, case-insensitive
+  const emailMatch = raw.match(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/i);
+  if (emailMatch) {
+    const email = emailMatch[0].toLowerCase();
+    const byEmail = data.workers.find(
+      (w) => (w.personal.work_email ?? '').toLowerCase() === email
+    );
+    if (byEmail) return workerToRecord(byEmail);
+  }
+
+  // 2. Worker ID — looks like "wkr_NNN"
+  if (/^wkr_\d+$/i.test(raw)) {
+    const byId = data.workers.find((w) => w.worker_id.toLowerCase() === raw.toLowerCase());
+    if (byId) return workerToRecord(byId);
+  }
+
+  // 3. Name — fuzzy, diacritic-insensitive
+  const q = normalizeName(raw);
   if (!q) return null;
 
-  // Exact full-name match first
   const exact = data.workers.find(
     (w) => normalizeName(w.personal.full_legal_name) === q
   );
   if (exact) return workerToRecord(exact);
 
-  // All-tokens-present match — "Aino Makinen" matches "Aino Mäkinen",
-  // "Aino" alone also matches.
   const partial = data.workers.find((w) => {
     const name = normalizeName(w.personal.full_legal_name);
     const queryTokens = q.split(/\s+/).filter(Boolean);
+    // Skip 1-token matches that are too generic (e.g. "Test" matching "Test Tester")
+    // unless the token is at least 4 chars
+    if (queryTokens.length === 1 && queryTokens[0].length < 4) return false;
     return queryTokens.every((t) => name.includes(t));
   });
   if (partial) return workerToRecord(partial);
@@ -139,6 +174,7 @@ function workerToRecord(w: WorkdayWorker): EmploymentRecord {
       fullName: w.personal.full_legal_name,
       dateOfBirth: w.personal.date_of_birth ?? '',
       address: homeAddress,
+      ...(w.personal.work_email ? { email: w.personal.work_email } : {}),
     },
     employer: {
       legalName: w.legal_entity.legal_name,

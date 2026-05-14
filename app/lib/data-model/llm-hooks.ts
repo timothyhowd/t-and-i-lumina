@@ -169,20 +169,42 @@ Constraints:
 
 const SUBJECT_SYSTEM = `You are an extraction step. Given a natural-language HR request, identify the SUBJECT employee — the person the request is about.
 
-Examples:
-  "Reduce Aino's hours from 37.5 to 30" → { "subjectName": "Aino" }
-  "Promote Jamie Park to Senior Staff" → { "subjectName": "Jamie Park" }
-  "We need a new hire for the Helsinki team" → { "subjectName": null }
-  "Sample Employee B is moving to a different role" → { "subjectName": "Sample Employee B" }
+Pick the strongest identifier present, in this priority order:
+1. work email (e.g. "aino.makinen@wolt.com")
+2. worker id (e.g. "wkr_005")
+3. full or partial name
 
-Output strict JSON: { "subjectName": "<name or null>" }
-Only return the name. No prose, no fences.`;
+If the request introduces a brand-new person (e.g. "we're hiring Jane Doe, born 1995-..."), return null — the system should NOT try to look them up.
+If the request references an existing person (changes, terminations, lookups, document generation tied to an existing employee), return the identifier.
+
+Examples:
+  "Reduce Aino's hours from 37.5 to 30" → { "identifier": "Aino", "identifierKind": "name" }
+  "Generate offer letter for aino.makinen@wolt.com" → { "identifier": "aino.makinen@wolt.com", "identifierKind": "email" }
+  "Send Jamie Park their employment certificate" → { "identifier": "Jamie Park", "identifierKind": "name" }
+  "Termination letter for wkr_006" → { "identifier": "wkr_006", "identifierKind": "worker_id" }
+  "We need a new hire for the Helsinki team" → { "identifier": null, "identifierKind": null }
+  "Hire a Senior PM, name TBD" → { "identifier": null, "identifierKind": null }
+
+Output strict JSON: { "identifier": "<value or null>", "identifierKind": "email | worker_id | name | null" }
+Only the JSON. No prose, no fences.`;
+
+export type SubjectIdentifier = {
+  identifier: string | null;
+  identifierKind: 'email' | 'worker_id' | 'name' | null;
+};
 
 /**
- * Identify the subject employee from a natural-language addendum/termination
- * request. Returns null when the request is about a new hire or unclear.
+ * Identify the subject employee from a natural-language HR request.
+ *
+ * Returns the strongest identifier found (email > worker_id > name), or
+ * null if the request is about a new hire / unclear. Callers decide
+ * whether to act on the identifier — for addendum/termination, ALWAYS;
+ * for employment_agreement, only when identifierKind is email or worker_id
+ * (those are deterministic; names risk false positives for new hires).
  */
-export async function identifySubjectEmployee(message: string): Promise<string | null> {
+export async function identifySubjectEmployee(
+  message: string
+): Promise<SubjectIdentifier> {
   const client = getLLMClient();
   const resp = await client.chat.completions.create({
     model: MODEL_HAIKU,
@@ -193,10 +215,13 @@ export async function identifySubjectEmployee(message: string): Promise<string |
     ],
   });
   try {
-    const parsed = parseJsonResponse<{ subjectName: string | null }>(extractText(resp));
-    return parsed.subjectName ?? null;
+    const parsed = parseJsonResponse<SubjectIdentifier>(extractText(resp));
+    return {
+      identifier: parsed.identifier ?? null,
+      identifierKind: parsed.identifierKind ?? null,
+    };
   } catch {
-    return null;
+    return { identifier: null, identifierKind: null };
   }
 }
 

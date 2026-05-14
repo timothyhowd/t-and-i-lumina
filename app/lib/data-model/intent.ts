@@ -47,9 +47,26 @@ Output strict JSON with this shape:
   "confidence": <0..1>
 }
 
-Brand-country defaults: Wolt → FIN; DoorDash → USA; Deliveroo → GBR.
-If the specialist did not specify a brand but named a country, infer from
-the brand-country defaults. Set fields to null if genuinely ambiguous.
+Brand-country inference (apply in BOTH directions):
+  - Wolt → FIN (default home country, when no other signal)
+  - DoorDash → USA
+  - Deliveroo → GBR
+  - FIN, EST, SWE, NOR, DEU, POL → wolt (Wolt's primary markets)
+  - USA, MEX, CAN, AUS → doordash
+  - GBR, IRL, FRA, ITA, ESP, NLD, BEL → deliveroo
+
+City clues:
+  - Helsinki, Tampere, Espoo, Vantaa → FIN + wolt
+  - Berlin, Munich, Hamburg, Frankfurt → DEU + wolt
+  - Warsaw, Krakow, Wroclaw → POL + wolt
+  - San Francisco, NYC, Austin, Seattle, LA → USA + doordash
+  - London, Manchester, Edinburgh, Dublin → GBR + deliveroo
+  - Sydney, Melbourne, Brisbane → AUS + doordash
+
+Apply these inferences silently — set country and brand to the inferred values
+when the user names a brand alone, a country alone, or a city. Set fields to
+null only when GENUINELY ambiguous (e.g., just "a new hire" with no other signal).
+
 Output only JSON. No prose, no fences.`;
 
 export async function routeIntent(

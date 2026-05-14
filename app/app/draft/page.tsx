@@ -600,22 +600,46 @@ function EmptyState({ onPick }: { onPick: (s: string) => void }) {
 }
 
 function briefIntent(intent: Intent): string {
-  const docPretty = prettyDocType(intent.docType);
+  // User-facing summary: lead with what the document IS, not its template id.
+  // "New hire · Wolt · Helsinki" reads better than "Wolt · FIN · Employment agreement".
+  const docPretty = friendlyDocType(intent.docType);
   const brandPretty =
     intent.brand === 'wolt' ? 'Wolt' : intent.brand === 'doordash' ? 'DoorDash' : intent.brand === 'deliveroo' ? 'Deliveroo' : intent.brand;
-  return `${brandPretty} · ${intent.country} · ${docPretty}`;
+  const country = friendlyCountry(intent.country);
+  return `${docPretty} · ${brandPretty} · ${country}`;
+}
+
+function friendlyCountry(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const map: Record<string, string> = {
+    FIN: 'Finland',
+    USA: 'United States',
+    DEU: 'Germany',
+    GBR: 'United Kingdom',
+    POL: 'Poland',
+    AUS: 'Australia',
+    SWE: 'Sweden',
+    NOR: 'Norway',
+    DNK: 'Denmark',
+    EST: 'Estonia',
+  };
+  return map[iso] ?? iso;
+}
+
+function friendlyDocType(d: string): string {
+  return ({
+    employment_agreement: 'New hire',
+    termination_letter: 'End of employment',
+    warning_letter: 'Written warning',
+    employment_certificate: 'Proof of employment',
+    nda: 'NDA',
+    addendum: 'Contract change',
+    travel_letter: 'Travel letter',
+  } as Record<string, string>)[d] ?? d.replace(/_/g, ' ');
 }
 
 function prettyDocType(d: string): string {
-  return ({
-    employment_agreement: 'Employment agreement',
-    termination_letter: 'Termination letter',
-    warning_letter: 'Warning letter',
-    employment_certificate: 'Employment certificate',
-    nda: 'NDA',
-    addendum: 'Addendum',
-    travel_letter: 'Travel letter',
-  } as Record<string, string>)[d] ?? d.replace(/_/g, ' ');
+  return friendlyDocType(d);
 }
 
 function filledToExtractedRows(filled: FilledSlot[]): ExtractedRow[] {

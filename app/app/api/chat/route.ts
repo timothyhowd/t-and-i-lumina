@@ -28,9 +28,10 @@ import {
   fillFreeText,
   identifySubjectEmployee,
 } from '@/lib/data-model/llm-hooks';
-import { findWorkerByName } from '@/lib/data-model/lookup';
+import { findWorkerByIdentifier } from '@/lib/data-model/lookup';
 import { routeIntent, type RoutedIntent } from '@/lib/data-model/intent';
 import { surfaceGap } from '@/lib/data-model/gap';
+import { getLatestDraft, looksLikeEdit, rememberDraft } from '@/lib/data-model/session-store';
 import type {
   Brand,
   DocumentType,
@@ -55,39 +56,39 @@ type ChatRequest = {
   };
 };
 
-const DOC_LABELS: Record<string, string> = {
-  employment_agreement: 'employment agreement',
-  addendum: 'addendum',
-  termination_letter: 'termination letter',
-  warning_letter: 'warning letter',
-  employment_certificate: 'employment certificate',
-  nda: 'NDA',
-  travel_letter: 'travel/visa letter',
+// User-facing phrasing for each doc type. Used in clarify questions only;
+// internal docType strings still use the technical names everywhere else.
+const FRIENDLY_DOC: Record<string, string> = {
+  employment_agreement: 'a new hire',
+  addendum: 'a change to someone\'s contract',
+  termination_letter: 'an end-of-employment letter',
+  warning_letter: 'a written warning',
+  employment_certificate: 'a proof-of-employment letter',
+  nda: 'a confidentiality agreement',
+  travel_letter: 'a travel or visa letter',
 };
 
 function buildClarify(intent: RoutedIntent): { question: string; choices: string[] } {
-  const doc = DOC_LABELS[intent.docType] ?? intent.docType.replace(/_/g, ' ');
+  const friendly = FRIENDLY_DOC[intent.docType] ?? 'this document';
   if (!intent.country && !intent.brand) {
+    // Ask the human question (where is the person), not the system question
+    // (which brand × country). The choices still scope the lookup but read
+    // as locations, not as internal taxonomy.
     return {
-      question: `For ${article(doc)} ${doc} like this — which country and brand are we working with?`,
-      choices: ['Wolt (Finland)', 'DoorDash (USA)', 'Deliveroo (UK)'],
+      question: `Where is the person based? That tells me which laws apply.`,
+      choices: ['Finland', 'United States', 'Germany', 'United Kingdom'],
     };
   }
   if (!intent.country) {
-    const b = intent.brand === 'wolt' ? 'Wolt' : intent.brand === 'doordash' ? 'DoorDash' : 'Deliveroo';
     return {
-      question: `Which country is this ${b} ${doc} for?`,
-      choices: intent.brand === 'wolt' ? ['Finland', 'Germany'] : intent.brand === 'doordash' ? ['USA', 'Australia'] : ['UK'],
+      question: `Which country is this for? That tells me which laws apply.`,
+      choices: ['Finland', 'United States', 'Germany', 'United Kingdom'],
     };
   }
   return {
-    question: `Which brand is this for?`,
+    question: `Which part of the business — Wolt, DoorDash, or Deliveroo?`,
     choices: ['Wolt', 'DoorDash', 'Deliveroo'],
   };
-}
-
-function article(word: string): string {
-  return /^[aeiou]/i.test(word) ? 'an' : 'a';
 }
 
 export async function POST(req: Request) {
@@ -126,43 +127,112 @@ export async function POST(req: Request) {
   const specialistId = body.sessionState?.specialistId ?? 'demo-specialist';
 
   try {
+    // 0. Post-draft edit shortcut.
+    //    If the previous turn produced a draft and THIS message looks like an
+    //    edit instruction ("actually start date is July 15"), route it as a
+    //    delta against the existing record instead of fresh classification.
+    //    This is the keystone for Principle 5 — corrections feel natural.
+    const latest = getLatestDraft(specialistId);
+    if (latest && looksLikeEdit(message)) {
+      const editDeltas = await extractDeltas(message, latest.record);
+      if (editDeltas.length > 0) {
+        // Apply deltas to the record, bumping the version
+        const updatedRecord = applyDeltas(latest.record, editDeltas);
+        const rule = jurisdictionRegistry.get(
+          updatedRecord.jurisdiction.country,
+          latest.docType as DocumentType
+        );
+        if (rule) {
+          const outcome = await compose(
+            {
+              message: 'Apply the documented edits and re-render.',
+              existingRecord: updatedRecord,
+              document: latest.document,
+              history: body.history,
+            },
+            {
+              jurisdictions: jurisdictionRegistry,
+              clauses: clauseLibrary,
+              llm: { extractRecordUpdates, fillFreeText },
+            }
+          );
+          if (outcome.kind === 'composed') {
+            rememberDraft(specialistId, {
+              record: outcome.record,
+              document: latest.document,
+              docType: latest.docType,
+              understoodAs: `Edited: ${editDeltas.map((d) => d.path).join(', ')}`,
+            });
+          }
+          return NextResponse.json(
+            translateOutcome(outcome, {
+              intentEcho: {
+                country: updatedRecord.jurisdiction.country,
+                brand: updatedRecord.jurisdiction.brand,
+                docType: latest.docType,
+                understoodAs: `Applied edits: ${editDeltas
+                  .map((d) => `${d.path} → ${JSON.stringify(d.after)}`)
+                  .join('; ')}`,
+                routingContext: {},
+              },
+              specialistId,
+            })
+          );
+        }
+      }
+      // If we couldn't extract any deltas, fall through to normal classification.
+    }
+
     // 1. Classify intent (Haiku).
     let intent: RoutedIntent = await routeIntent(message, body.history);
 
-    // 2. Fast path for delta docs: look up the subject employee in mock Workday.
-    //    If found, the record carries jurisdiction, so we can skip the clarify step.
+    // 2. Identify any existing-employee subject in the message.
+    //    For deltas (addendum/termination), ALWAYS lookup by whatever identifier
+    //    is found.  For new docs (EA, certificate, NDA, travel), only lookup when
+    //    the identifier is deterministic (email or worker_id) — a bare name on a
+    //    new-hire request is more likely a new person than a lookup.
     let preResolvedBaseRecord: EmploymentRecord | null = null;
     let preResolvedDocument: LuminaDocument | null = null;
-    if (intent.docType === 'addendum' || intent.docType === 'termination_letter') {
-      const subjectName = await identifySubjectEmployee(message);
-      if (subjectName) {
-        const existing = await findWorkerByName(subjectName);
-        if (existing) {
-          preResolvedBaseRecord = existing;
-          intent = {
-            ...intent,
-            country: existing.jurisdiction.country,
-            brand: existing.jurisdiction.brand,
-          };
-          if (intent.docType === 'addendum') {
-            const deltas = await extractDeltas(message, existing);
-            preResolvedDocument = {
-              documentType: 'addendum',
-              basedOn: { recordId: existing.recordId, recordVersion: existing.recordVersion },
-              changes: deltas,
-            } as AddendumDoc;
-          } else {
-            preResolvedDocument = {
-              documentType: 'termination_letter',
-              basedOn: { recordId: existing.recordId, recordVersion: existing.recordVersion },
-              termination: {
-                reason: 'mutual',
-                lastWorkingDay: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-                noticeGivenOn: new Date().toISOString().slice(0, 10),
-              },
-            } as TerminationLetterDoc;
-          }
+    const subject = await identifySubjectEmployee(message);
+
+    const shouldLookup =
+      subject.identifier &&
+      (intent.docType === 'addendum' ||
+        intent.docType === 'termination_letter' ||
+        intent.docType === 'employment_certificate' ||
+        // For EA / NDA / travel, only lookup on deterministic identifiers
+        subject.identifierKind === 'email' ||
+        subject.identifierKind === 'worker_id');
+
+    if (shouldLookup && subject.identifier) {
+      const existing = await findWorkerByIdentifier(subject.identifier);
+      if (existing) {
+        preResolvedBaseRecord = existing;
+        intent = {
+          ...intent,
+          country: existing.jurisdiction.country,
+          brand: existing.jurisdiction.brand,
+        };
+        if (intent.docType === 'addendum') {
+          const deltas = await extractDeltas(message, existing);
+          preResolvedDocument = {
+            documentType: 'addendum',
+            basedOn: { recordId: existing.recordId, recordVersion: existing.recordVersion },
+            changes: deltas,
+          } as AddendumDoc;
+        } else if (intent.docType === 'termination_letter') {
+          preResolvedDocument = {
+            documentType: 'termination_letter',
+            basedOn: { recordId: existing.recordId, recordVersion: existing.recordVersion },
+            termination: {
+              reason: 'mutual',
+              lastWorkingDay: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+              noticeGivenOn: new Date().toISOString().slice(0, 10),
+            },
+          } as TerminationLetterDoc;
         }
+        // For EA / certificate / NDA / travel, the buildDocumentFromIntent default
+        // below is fine — we just want the base record pre-filled from Workday.
       }
     }
 
@@ -203,6 +273,14 @@ export async function POST(req: Request) {
           llm: { extractRecordUpdates, fillFreeText },
         }
       );
+      if (outcome.kind === 'composed') {
+        rememberDraft(specialistId, {
+          record: outcome.record,
+          document,
+          docType: intent.docType,
+          understoodAs: intent.understoodAs,
+        });
+      }
       return NextResponse.json(translateOutcome(outcome, { intentEcho, specialistId }));
     }
 
@@ -228,4 +306,37 @@ export async function POST(req: Request) {
       { status: 500 }
     );
   }
+}
+
+/**
+ * Apply a list of FieldDeltas to an EmploymentRecord. Used by the
+ * post-draft edit shortcut to mutate the stored record before re-rendering.
+ * Bumps recordVersion. Updates metadata.updatedAt.
+ */
+import type { FieldDelta } from '@/lib/data-model/document';
+
+function applyDeltas(record: EmploymentRecord, deltas: FieldDelta[]): EmploymentRecord {
+  const cloned: EmploymentRecord = JSON.parse(JSON.stringify(record));
+  for (const d of deltas) {
+    setDeepPath(cloned, d.path, d.after);
+  }
+  cloned.recordVersion = (cloned.recordVersion ?? 1) + 1;
+  cloned.metadata = {
+    ...cloned.metadata,
+    updatedAt: new Date().toISOString(),
+  };
+  return cloned;
+}
+
+function setDeepPath(obj: unknown, path: string, value: unknown): void {
+  const segments = path.split('.');
+  let cur: Record<string, unknown> = obj as Record<string, unknown>;
+  for (let i = 0; i < segments.length - 1; i++) {
+    const seg = segments[i];
+    if (typeof cur[seg] !== 'object' || cur[seg] === null) {
+      cur[seg] = {};
+    }
+    cur = cur[seg] as Record<string, unknown>;
+  }
+  cur[segments[segments.length - 1]] = value;
 }

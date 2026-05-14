@@ -524,22 +524,26 @@ export function GapCard({
   onStartOver: () => void;
 }) {
   const topTwo = options.slice(0, 2);
-  const country = intent.country ?? 'that country';
-  const docLabel = ({
-    employment_agreement: 'employment agreement',
-    addendum: 'addendum',
-    termination_letter: 'termination letter',
-    warning_letter: 'warning letter',
-    employment_certificate: 'employment certificate',
-    nda: 'NDA',
-    travel_letter: 'travel/visa letter',
-  } as Record<string, string>)[intent.docType] ?? intent.docType.replace(/_/g, ' ');
+  const friendlyCountry = ({
+    FIN: 'Finland', USA: 'the United States', DEU: 'Germany', GBR: 'the United Kingdom',
+    POL: 'Poland', AUS: 'Australia', SWE: 'Sweden', NOR: 'Norway', DNK: 'Denmark',
+    BRA: 'Brazil', MEX: 'Mexico', CAN: 'Canada',
+  } as Record<string, string>)[intent.country ?? ''] ?? intent.country ?? 'that location';
+  const friendlyDoc = ({
+    employment_agreement: 'a hire',
+    addendum: 'this kind of contract change',
+    termination_letter: 'end-of-employment letters',
+    warning_letter: 'written warnings',
+    employment_certificate: 'proof-of-employment letters',
+    nda: 'NDAs',
+    travel_letter: 'travel/visa letters',
+  } as Record<string, string>)[intent.docType] ?? 'this kind of document';
 
   return (
     <div className="ml-7 mt-1 animate-in fade-in slide-in-from-bottom-1 duration-200">
       <div className="rounded-lg border border-line bg-card px-4 py-3 shadow-s1 space-y-2.5">
         <p className="text-[13.5px] text-ink-2">
-          No processed {docLabel} template for <span className="font-medium text-ink">{country}</span> yet — here's what I can do:
+          I don't have approved language for {friendlyDoc} in <span className="font-medium text-ink">{friendlyCountry}</span> yet — here's how I can help anyway:
         </p>
         <div className="flex flex-wrap gap-2">
           {topTwo.map((opt, i) => (
@@ -547,7 +551,7 @@ export function GapCard({
               key={i}
               type="button"
               disabled={consumed}
-              onClick={() => onChoose(buildGapAction(opt, country))}
+              onClick={() => onChoose(buildGapAction(opt, intent.country ?? friendlyCountry))}
               className={`rounded-full border px-3 py-1 text-[12.5px] shadow-s1 transition-all ${
                 consumed
                   ? 'border-line bg-bg text-muted/70 cursor-default'
