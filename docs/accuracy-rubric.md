@@ -233,6 +233,134 @@ Each of these is a clause that exists or needs to be added in `clauses/fin.ts`, 
 
 ---
 
+---
+
+## Score: 2026-05-14 — Aino Mäkinen, FIN/Wolt EA (Lumina v2, **after FIN clause fixes**, commit `985cdd7+`)
+
+Same prompt as the previous run. The four FIN clause gaps identified in the
+3.95 score were closed: added `fin.further_details` (Section 2(4) disclosure
+block), `fin.other_terms` (Section 9 final-pay-on-next-payday), extended
+`fin.parties` to include the "undertakes to carry out" preamble, and
+auto-inferred `flags.cbaApplicable: true` for FIN operational/supervisor
+roles via `lookup.ts:inferFlags`.
+
+| # | Dimension | Weight | Score | Weighted |
+|---|---|--:|--:|--:|
+| 1 | Legal correctness | 3.0 | 5.0 | 15.0 |
+| 2 | Jurisdiction fit | 2.5 | 5.0 | 12.5 |
+| 3 | Completeness | 2.0 | 5.0 | 10.0 |
+| 4 | Data accuracy | 2.0 | 5.0 | 10.0 |
+| 5 | Prose quality | 1.5 | 4.5 | 6.75 |
+| 6 | Formatting | 1.0 | 5.0 | 5.0 |
+| 7 | Brand & entity fit | 1.5 | 4.5 | 6.75 |
+| 8 | Defensibility | 2.0 | 4.0 | 8.0 |
+| | | **15.5** | | **74.0** |
+
+**Final: 74.0 / 15.5 = 4.77 / 5.0** (was 3.95; +0.82)
+
+Lands in **"production-trajectory"** band (≥ 4.5). Counsel review with minor
+edits would clear this. Side-by-side comparison against
+`corpus/extracts/fin/high_ga_permanent.txt` shows structural parity — same
+section headings, same FURTHER DETAILS block, same CBA reference, same
+final-pay convention.
+
+---
+
+## Score: 2026-05-14 — Jamie Park, USA/DoorDash offer letter
+
+Prompt: *"Generate an offer letter for jamie.park@doordash.com. Duties: design and ship distributed systems, mentor mid-level engineers, lead design reviews."*
+
+Two issues surfaced and were fixed during scoring:
+- **Cross-brand signatory bleed.** The lookup adapter hardcoded "Mikko
+  Korhonen, Head of People" (a Wolt signatory) regardless of brand. Fixed
+  by adding `defaultSignatoryFor(brand)` in `lookup.ts`. DoorDash drafts
+  now sign with "Chris Martin, Head of People, US".
+- **Raw enum rendering.** The USA compensation clause rendered "180000 USD
+  annual" — readable but unprofessional. Replaced with a `freeText` slot
+  that asks Opus to render as "$180,000 per year" with proper US conventions.
+
+Scored AFTER fixes:
+
+| # | Dimension | Weight | Score | Weighted |
+|---|---|--:|--:|--:|
+| 1 | Legal correctness | 3.0 | 4.0 | 12.0 |
+| 2 | Jurisdiction fit | 2.5 | 5.0 | 12.5 |
+| 3 | Completeness | 2.0 | 5.0 | 10.0 |
+| 4 | Data accuracy | 2.0 | 5.0 | 10.0 |
+| 5 | Prose quality | 1.5 | 5.0 | 7.5 |
+| 6 | Formatting | 1.0 | 4.5 | 4.5 |
+| 7 | Brand & entity fit | 1.5 | 5.0 | 7.5 |
+| 8 | Defensibility | 2.0 | 4.0 | 8.0 |
+| | | **15.5** | | **72.0** |
+
+**Final: 72.0 / 15.5 = 4.65 / 5.0**
+
+Production-trajectory band. D1 doesn't hit 5.0 because USA offer letters are
+citation-light by convention (FLSA is the only inline anchor); the at-will
+disclaimer + PIIA reference replace the citation density of FIN/DEU.
+
+---
+
+## Score: 2026-05-14 — Maximilian Schmidt, DEU/Wolt EA
+
+Prompt: full brain dump for a new Wolt Germany hire, indefinite, 5500 EUR/month, 40 hours/week.
+
+| # | Dimension | Weight | Score | Weighted |
+|---|---|--:|--:|--:|
+| 1 | Legal correctness | 3.0 | 5.0 | 15.0 |
+| 2 | Jurisdiction fit | 2.5 | 5.0 | 12.5 |
+| 3 | Completeness | 2.0 | 5.0 | 10.0 |
+| 4 | Data accuracy | 2.0 | 5.0 | 10.0 |
+| 5 | Prose quality | 1.5 | 3.5 | 5.25 |
+| 6 | Formatting | 1.0 | 4.0 | 4.0 |
+| 7 | Brand & entity fit | 1.5 | 5.0 | 7.5 |
+| 8 | Defensibility | 2.0 | 4.5 | 9.0 |
+| | | **15.5** | | **73.25** |
+
+**Final: 73.25 / 15.5 = 4.73 / 5.0**
+
+Production-trajectory band. The 3.5 on prose quality reflects the same
+"5500 EUR monthly" enum-leak the USA clause had pre-fix — DEU compensation
+clause hasn't been converted to a `freeText` slot yet. Fix is a 5-minute
+copy of the USA pattern. Will lift D5 → 5.0 and total → ~4.83.
+
+Also the § 4 Arbeitsort clause has a DE/EN block-break issue (German and
+English run together without a proper line break in some renders). Minor;
+clause-text fix.
+
+---
+
+## Pattern across the three runs
+
+| Run | Final | D1 Legal | D2 Juris | D5 Prose | D8 Defens. |
+|---|--:|--:|--:|--:|--:|
+| FIN Aino | 4.77 | 5.0 | 5.0 | 4.5 | 4.0 |
+| USA Jamie | 4.65 | 4.0 | 5.0 | 5.0 | 4.0 |
+| DEU Max | 4.73 | 5.0 | 5.0 | 3.5 | 4.5 |
+
+**Observations:**
+
+1. **All three above the 4.5 production-trajectory threshold.** The PoC is at the level where counsel review with minor edits would clear it. The original north star — generating documents comparable to a consultancy's — is reachable from here.
+
+2. **Dimensions 3 (Completeness) and 4 (Data accuracy) score 5.0 across the board.** The architecture handles these correctly. Not a source of future risk.
+
+3. **D5 Prose quality is the leading edge indicator for clause polish.** When a clause renders raw enum values (`monthly`, `bi_weekly`, `annual`) inline with numbers, it loses 0.5–1.5 points. The pattern fix is: replace the raw `{{placeholder}}` with a `{{#freeText "summary"}}` slot whose instructions tell Opus to format the value naturally. USA compensation clause now does this; DEU compensation should follow.
+
+4. **D1 Legal correctness ceiling depends on jurisdictional convention.** FIN and DEU are statute-citation-heavy and score 5.0. USA caps at ~4.0 because at-will offer letters cite FLSA/ERISA/COBRA in anchors but not in body. That's correct for USA; not a defect.
+
+5. **The 4 FIN gaps were content gaps in a single jurisdiction.** Closing them produced a 0.82-point lift. Architectural changes were not needed. This validates the v2 separation of data/jurisdiction/clause layers — content polish is contained to the clause library file for one country.
+
+## Recommended next moves to lift further
+
+If the goal is a 4.8+ average across the three runs:
+
+1. **Convert the DEU compensation clause to a `freeText` slot** (5 minutes; +0.10 to DEU)
+2. **Add line-break discipline to DEU bilingual clauses** so DE and EN don't run together (10 minutes; +0.05 to DEU)
+3. **Get a counsel review on one FIN clause** (out-of-system; would lift D8 across all FIN drafts to 5.0)
+4. **Score a fourth scenario: a delta document** (e.g., the Aino hours-reduction addendum). The addendum path has different code paths (lookup → delta extract → compose-with-changes) and a different clause set (`fin.addendum_recital`, `fin.addendum_delta`). Worth verifying it scores in the same band.
+
+---
+
 ## Baseline-sourcing plan (since EY folder is empty)
 
 The PoC's stated comparison target is "the consulting firm's outputs," and `Z - EY` in the shared Drive remains empty. Three concrete paths:

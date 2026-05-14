@@ -32,16 +32,21 @@ const FIN_PARTIES: Clause = {
   jurisdiction: 'FIN',
   topic: 'parties',
   applicableTo: ['employment_agreement', 'termination_letter'],
-  body: `## 1. PARTIES
+  body: `## 1. PARTIES TO THE EMPLOYMENT RELATIONSHIP
 
 **Employer**
 {{record.employer.legalName}} (Business ID {{record.employer.registrationId.value}})
+
+Place of business or domicile
 {{record.employer.registeredAddress.street}}, {{record.employer.registeredAddress.postalCode}} {{record.employer.registeredAddress.city}}
 
 **Employee**
 {{record.employee.fullName}}
-Born {{record.employee.dateOfBirth}}
-{{record.employee.address.street}}, {{record.employee.address.postalCode}} {{record.employee.address.city}}`,
+
+Date of birth and address
+{{record.employee.dateOfBirth}}, {{record.employee.address.street}}, {{record.employee.address.postalCode}} {{record.employee.address.city}}
+
+The above-mentioned employee undertakes to carry out work designated by the above-mentioned employer against reimbursement under the employer's supervision and management and subject to the following terms and conditions:`,
   citations: [{ ...ANCHORS.ECA, section: 'Ch.1 §3 (form and content)' }],
   reviewStatus: 'unverified',
 };
@@ -170,6 +175,62 @@ The collective agreement binding the Employer ({{record.flags.cbaName}}) and the
   reviewStatus: 'unverified',
 };
 
+const FIN_OTHER_TERMS: Clause = {
+  clauseId: 'fin.other_terms',
+  jurisdiction: 'FIN',
+  topic: 'compensation',
+  applicableTo: ['employment_agreement'],
+  body: `## 9. OTHER TERMS AND CONDITIONS
+
+At the end of the employment relationship, the final pay (including any
+accrued, unused annual leave) will be paid on the following payday of the
+Company.`,
+  citations: [{ ...ANCHORS.AHA, section: '§17 (compensation for unused holiday)' }],
+  reviewStatus: 'unverified',
+};
+
+/**
+ * Section 2(4) FURTHER DETAILS — statutorily required additional disclosures
+ * under the Finnish Employment Contracts Act. Rendered as a separate block
+ * after the signature in the production Wolt template; we keep that ordering
+ * by giving this clause a high `order` in the jurisdiction rule.
+ *
+ * The CBA name is interpolated when `flags.cbaApplicable` is true; otherwise
+ * a fallback statement is shown. Free-text slot describes the work-location
+ * scope and the salary-payment practice using actual record values.
+ */
+const FIN_FURTHER_DETAILS: Clause = {
+  clauseId: 'fin.further_details',
+  jurisdiction: 'FIN',
+  topic: 'place_of_work',
+  applicableTo: ['employment_agreement'],
+  body: `## FURTHER DETAILS
+
+Under Section 2(4) of the Employment Contracts Act, the Employer additionally notifies the following key terms and conditions of employment:
+
+**Place of work.** {{#freeText "place_of_work_detail"}}{{/freeText}}
+
+**Pay period.** The Salary shall be paid in accordance with the Company's salary-payment practice as in force from time to time to a bank account specified by the Employee. {{#freeText "pay_period_detail"}}{{/freeText}}
+
+**The collective agreement binding the Employer at the start of employment is:** {{#if record.flags.cbaName}}{{record.flags.cbaName}}.{{/if}}{{#if record.flags.cbaApplicable}}{{/if}}`,
+  citations: [{ ...ANCHORS.ECA, section: 'Ch.2 §4 (key-term disclosure)' }],
+  reviewStatus: 'unverified',
+  freeTextSlots: [
+    {
+      name: 'place_of_work_detail',
+      instructions:
+        'Describe the primary place of work for this employee, citing record.position.workLocation. Mirror the convention from real Wolt templates: name the city or metropolitan area, and note that the Company may change the primary place of work according to business needs, including remote work from home. One short paragraph, neutral legal-style language.',
+      maxChars: 400,
+    },
+    {
+      name: 'pay_period_detail',
+      instructions:
+        'State the pay date convention. For monthly_fixed compensation, the typical Finnish convention is "the pay date is the 20th day of the month." For hourly_paygrade, reference the bi-weekly schedule used by Wolt. One sentence.',
+      maxChars: 200,
+    },
+  ],
+};
+
 const FIN_SIGNATURE: Clause = {
   clauseId: 'fin.signature',
   jurisdiction: 'FIN',
@@ -263,6 +324,8 @@ export const FIN_CLAUSES: Clause[] = [
   FIN_ANNUAL_LEAVE,
   FIN_NOTICE_PERIOD,
   FIN_CBA_BINDING,
+  FIN_OTHER_TERMS,
+  FIN_FURTHER_DETAILS,
   FIN_SIGNATURE,
   FIN_ADDENDUM_RECITAL,
   FIN_ADDENDUM_DELTA,

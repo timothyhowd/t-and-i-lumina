@@ -100,9 +100,12 @@ export const FIN_EMPLOYMENT_AGREEMENT: JurisdictionRule = {
       clauseId: 'fin.cba_binding',
       order: 10,
       appliesWhen: { eq: ['flags.cbaApplicable', true] },
-      required: true,
     },
+    { clauseId: 'fin.other_terms', order: 11, required: true },
     { clauseId: 'fin.signature', order: 99, required: true },
+    // Section 2(4) FURTHER DETAILS block lives AFTER signatures in the real
+    // Wolt template — rendered as a separate addendum at the end of the doc.
+    { clauseId: 'fin.further_details', order: 100, required: true },
   ],
 
   regulationAnchors: COMMON_ANCHORS,

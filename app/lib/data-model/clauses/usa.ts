@@ -98,9 +98,17 @@ const USA_COMPENSATION: Clause = {
   applicableTo: ['employment_agreement'],
   body: `## COMPENSATION
 
-Your base compensation will be {{record.compensation.base.amount}} {{record.compensation.base.currency}} {{record.compensation.payFrequency}}, less applicable withholdings, paid on the Company's regular pay schedule.`,
+{{#freeText "compensation_summary"}}{{/freeText}}`,
   citations: [ANCHORS.FLSA],
   reviewStatus: 'unverified',
+  freeTextSlots: [
+    {
+      name: 'compensation_summary',
+      instructions:
+        'Describe the base compensation using record.compensation.base.amount and currency, with proper formatting. Convention for USA offer letters: "Your base compensation will be $XXX,XXX per year" (use commas for thousands, $ symbol for USD). If payFrequency is "annual", use "per year"; if "monthly", "per month"; if "bi_weekly", "paid bi-weekly". Always end with: ", less applicable withholdings, paid on the Company\'s regular pay schedule." One sentence.',
+      maxChars: 240,
+    },
+  ],
 };
 
 const USA_BENEFITS_SUMMARY: Clause = {

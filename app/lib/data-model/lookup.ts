@@ -180,7 +180,7 @@ function workerToRecord(w: WorkdayWorker): EmploymentRecord {
       legalName: w.legal_entity.legal_name,
       registrationId: businessIdFor(country, w.legal_entity.business_id ?? ''),
       registeredAddress: employerAddress,
-      signatory: { name: 'Mikko Korhonen', title: 'Head of People' },
+      signatory: defaultSignatoryFor(brand),
       brand,
     },
     position: {
@@ -210,7 +210,7 @@ function workerToRecord(w: WorkdayWorker): EmploymentRecord {
       ...(w.compensation.pay_grade ? { payGrade: w.compensation.pay_grade } : {}),
       payFrequency: payFreq,
     },
-    flags: {},
+    flags: inferFlags(country, mapRoleTier(w.position.role_tier), w.position.title),
     metadata: {
       createdAt: w.employment.hire_date + 'T00:00:00Z',
       updatedAt: new Date().toISOString(),
@@ -218,6 +218,49 @@ function workerToRecord(w: WorkdayWorker): EmploymentRecord {
       draftStatus: 'approved',
     },
   };
+}
+
+/**
+ * Infer EmploymentFlags from country + role context.
+ *
+ * For Finland: operational and supervisor roles in commerce (warehouse,
+ * store, grocery) are almost universally covered by the Commercial Sector's
+ * collective agreement. Defaulting flags.cbaApplicable to true for those
+ * tiers matches reality and unblocks the FIN CBA clause without forcing
+ * the user to know about CBAs at all.
+ *
+ * For other jurisdictions, leave flags empty — these are jurisdiction-
+ * specific signals that should be set deliberately by extension.
+ */
+function inferFlags(
+  country: ISOCountry,
+  tier: NonNullable<EmploymentRecord['position']['classification']>['tier'],
+  positionTitle: string
+): EmploymentRecord['flags'] {
+  const flags: EmploymentRecord['flags'] = {};
+
+  // USA & UK: anyone in Workday has already passed I-9 / right-to-work
+  // verification — that's a hire-time gate. The flag captures that on the
+  // record so jurisdiction rules don't ask the user to re-state it.
+  if (country === 'USA' || country === 'GBR') {
+    flags.rightToWorkVerified = true;
+  }
+
+  // Finland: operational and supervisor roles in commerce (warehouse, store,
+  // grocery) are almost universally covered by the Commercial Sector's CBA.
+  // Defaulting flags.cbaApplicable to true for those tiers matches reality
+  // and unblocks the FIN CBA clause without forcing the user to know about
+  // CBAs at all.
+  if (country === 'FIN' && (tier === 'operational' || tier === 'supervisor')) {
+    const lower = positionTitle.toLowerCase();
+    const isWarehouse = /warehouse|grocer(?:y|ies)|store|stock|inventory/.test(lower);
+    flags.cbaApplicable = true;
+    flags.cbaName = isWarehouse
+      ? "Commercial Sector's collective agreement (warehouse workers)"
+      : "Commercial Sector's collective agreement";
+  }
+
+  return flags;
 }
 
 /* ── helpers ──────────────────────────────────────────────────────────── */
@@ -266,6 +309,22 @@ function defaultCurrency(country: ISOCountry): EmploymentRecord['compensation'][
     case 'AUS': return 'AUD';
     case 'POL': return 'PLN';
     default: return 'EUR';
+  }
+}
+
+/**
+ * Per-brand default signatory. Fictional names; real Workday would
+ * provide the actual hiring manager / People lead for the entity.
+ * Avoids cross-brand contamination (no Mikko Korhonen on a DoorDash doc).
+ */
+function defaultSignatoryFor(brand: Brand): { name: string; title: string } {
+  switch (brand) {
+    case 'wolt':
+      return { name: 'Mikko Korhonen', title: 'Head of People' };
+    case 'doordash':
+      return { name: 'Chris Martin', title: 'Head of People, US' };
+    case 'deliveroo':
+      return { name: 'Sarah Nolan', title: 'Head of People, UK' };
   }
 }
 
