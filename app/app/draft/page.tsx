@@ -142,33 +142,6 @@ export default function DraftPage() {
     if (!text || busy) return;
     setComposerValue('');
 
-    // Mid-slot-asking? Treat input as the answer to the current slot.
-    if (session && session.queue.length > 0) {
-      const currentSlot = session.queue[0];
-      pushMessage({ id: newId(), role: 'user', text });
-      const collected = { ...session.collected, [currentSlot.slot]: text };
-      const queueAfter = session.queue.slice(1);
-      const updatedSession = { ...session, collected, queue: queueAfter };
-
-      setPreview({
-        kind: 'collecting',
-        intent: session.intent,
-        filled: session.initialFilled,
-        collected,
-        remaining: queueAfter.length,
-      });
-
-      if (queueAfter.length > 0) {
-        const next = queueAfter[0];
-        setSession(updatedSession);
-        await acknowledgeAndAsk(next, queueAfter.length);
-      } else {
-        setSession(updatedSession);
-        showSummaryCard(updatedSession);
-      }
-      return;
-    }
-
     pushMessage({ id: newId(), role: 'user', text });
     const updatedHistory = [...history, { role: 'user' as const, content: text }];
     setHistory(updatedHistory);
@@ -275,26 +248,10 @@ export default function DraftPage() {
         remaining: resp.missing.length,
       });
 
-      const queue = [...resp.missing];
-      if (queue.length === 0) {
-        const sessionState: SlotAskingSession = {
-          originalMessage: message,
-          candidateRef: candRef,
-          templateId: resp.templateId,
-          collected: {},
-          queue: [],
-          initialFilled: resp.filled,
-          intent: resp.intent,
-        };
-        showSummaryCard(sessionState);
-        setBusy(false);
-        return;
-      }
-
-      const firstSlot = queue[0];
-      const askText = queue.length === 1
-        ? `One last thing. ${firstSlot.askPrompt}`
-        : `Just need ${queue.length} more thing${queue.length === 1 ? '' : 's'}. ${firstSlot.askPrompt}`;
+      const missing = resp.missing;
+      const askText = missing.length === 1
+        ? `One thing I still need — ${missing[0].askPrompt}`
+        : `Just need ${missing.length} more things:\n${missing.map((m) => `• ${m.askPrompt}`).join('\n')}`;
       pushMessage({ id: newId(), role: 'assistant', text: askText, typewriter: true });
       setHistory((prev) => [...prev, { role: 'assistant', content: askText }]);
 
@@ -303,7 +260,7 @@ export default function DraftPage() {
         candidateRef: candRef,
         templateId: resp.templateId,
         collected: {},
-        queue,
+        queue: missing,
         initialFilled: resp.filled,
         intent: resp.intent,
       });
@@ -312,16 +269,6 @@ export default function DraftPage() {
     }
 
     setBusy(false);
-  }
-
-  /* ── one-off acknowledgements between slot questions ──────────────── */
-  async function acknowledgeAndAsk(nextSlot: MissingSlot, remainingCount: number) {
-    const acks = ['Got it. ', 'Thanks. ', 'Noted. ', 'Okay. ', ''];
-    const ack = acks[Math.floor(Math.random() * acks.length)];
-    const prefix = remainingCount === 1 ? `${ack}One more — ` : `${ack}`;
-    const text = `${prefix}${nextSlot.askPrompt}`;
-    pushMessage({ id: newId(), role: 'assistant', text, typewriter: true });
-    setHistory((prev) => [...prev, { role: 'assistant', content: text }]);
   }
 
   /* ── summary card flow ────────────────────────────────────────────── */
@@ -360,6 +307,7 @@ export default function DraftPage() {
 
   function dismissSummaryForEdit() {
     setPendingSummary(false);
+    setSession(null);
     setMessages((prev) => {
       let i = -1;
       for (let k = prev.length - 1; k >= 0; k--) {
